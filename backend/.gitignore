@@ -1,0 +1,10 @@
+.env
+logs/
+archive/
+.claude/
+database/migrations/
+.coverage
+coverage.xml
+.pytest_cache/
+__pycache__/
+.venv/

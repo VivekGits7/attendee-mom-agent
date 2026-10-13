@@ -1,0 +1,19 @@
+services:
+  mom-generator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mom-generator
+    env_file:
+      - .env
+    ports:
+      - "8010:8010"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - mom-generator-network
+    restart: unless-stopped
+
+networks:
+  mom-generator-network:
+    driver: bridge

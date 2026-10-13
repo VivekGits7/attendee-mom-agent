@@ -1,0 +1,29 @@
+[project]
+name = "mom-generator"
+version = "0.1.0"
+description = "Sends a notetaker bot to Meet and Teams, stores the transcript and emails the minutes"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.139.2",
+    "uvicorn[standard]>=0.51.0",
+    "asyncpg>=0.31.0",
+    "pydantic[email]>=2.13.4",
+    "pydantic-settings>=2.14.2",
+    "python-dotenv>=1.2.2",
+    "pyyaml>=6.0.3",
+    "slowapi>=0.1.10",
+    "httpx>=0.28.1",
+    "openai>=2.53.0",
+    "aiosmtplib>=3.0.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-p no:deepeval"
