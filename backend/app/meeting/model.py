@@ -36,13 +36,15 @@ _INSERT_UTTERANCE = """
 
 _LIST_COLUMNS = """
     meeting_id, title, meeting_url, platform, bot_id, bot_state, status,
-    recipient_email, join_at, email_status, email_sent_to, error_message, created_at
+    recipient_email, join_at, calendar_event_id, calendar_end_at,
+    email_status, email_sent_to, error_message, created_at
 """
 
 _SORT_COLUMNS = {
     MeetingSortBy.TITLE: "LOWER(title)",
     MeetingSortBy.STATUS: "status",
     MeetingSortBy.CREATED_AT: "created_at",
+    MeetingSortBy.JOIN_AT: "join_at",
 }
 
 
@@ -50,6 +52,8 @@ def _meeting_filters(
     search: Optional[str],
     status: Optional[MeetingStatus],
     platform: Optional[MeetingPlatform],
+    join_from: Optional[datetime],
+    join_until: Optional[datetime],
 ) -> tuple[str, list]:
     conditions: list[str] = []
     args: list = []
@@ -64,6 +68,12 @@ def _meeting_filters(
     if platform:
         args.append(platform.value)
         conditions.append(f"platform = ${len(args)}")
+    if join_from:
+        args.append(join_from)
+        conditions.append(f"join_at >= ${len(args)}")
+    if join_until:
+        args.append(join_until)
+        conditions.append(f"join_at < ${len(args)}")
     return " WHERE " + " AND ".join(conditions) if conditions else "", args
 
 
@@ -89,6 +99,8 @@ class Meeting:
         self.meeting_id = kwargs.get("meeting_id")
         self.title = kwargs.get("title")
         self.meeting_url = kwargs.get("meeting_url")
+        self.calendar_event_id = kwargs.get("calendar_event_id")
+        self.calendar_end_at = kwargs.get("calendar_end_at")
         self.platform = kwargs.get("platform")
         self.bot_id = kwargs.get("bot_id")
         self.bot_state = kwargs.get("bot_state")
@@ -147,24 +159,103 @@ class Meeting:
         return cls(**dict(row)) if row else None
 
     @classmethod
+    async def find_by_calendar_event_id(cls, event_id: str) -> Optional["Meeting"]:
+        row = await execute_query_one(
+            "SELECT * FROM meetings WHERE calendar_event_id = $1", event_id
+        )
+        return cls(**dict(row)) if row else None
+
+    @classmethod
+    async def create_from_calendar(
+        cls, event_id: str, title: str, meeting_url: str, recipient_email: Optional[str], join_at, end_at
+    ) -> Optional["Meeting"]:
+        status = MeetingStatus.SCHEDULED if join_at else MeetingStatus.JOINING
+        row = await execute_command_with_return(
+            """
+            INSERT INTO meetings (
+                meeting_id, calendar_event_id, calendar_end_at, title, meeting_url,
+                platform, status, recipient_email, join_at, email_status
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            ON CONFLICT (calendar_event_id) DO NOTHING
+            RETURNING *
+            """,
+            uuid.uuid4(), event_id, end_at, title, meeting_url,
+            MeetingPlatform.TEAMS.value, status.value, recipient_email, join_at,
+            EmailStatus.PENDING.value,
+        )
+        return cls(**dict(row)) if row else None
+
+    @classmethod
+    async def list_scheduled_calendar_meetings(cls, start_at, end_at) -> List["Meeting"]:
+        rows = await execute_query(
+            """
+            SELECT * FROM meetings
+            WHERE calendar_event_id IS NOT NULL AND status = $1
+              AND join_at BETWEEN $2 AND $3
+            """,
+            MeetingStatus.SCHEDULED.value, start_at, end_at,
+        )
+        return [cls(**dict(row)) for row in rows]
+
+    async def update_calendar_details(self, title: str, meeting_url: str, join_at, end_at) -> None:
+        await execute_command(
+            """
+            UPDATE meetings
+            SET title = $2, meeting_url = $3, join_at = $4, calendar_end_at = $5, updated_at = NOW()
+            WHERE meeting_id = $1
+            """,
+            self.meeting_id, title, meeting_url, join_at, end_at,
+        )
+        self.title, self.meeting_url, self.join_at, self.calendar_end_at = title, meeting_url, join_at, end_at
+
+    @classmethod
+    async def claim_failed_calendar_event(cls, event_id: str, title: str, meeting_url: str, join_at, end_at) -> Optional["Meeting"]:
+        status = MeetingStatus.SCHEDULED if join_at else MeetingStatus.JOINING
+        row = await execute_command_with_return(
+            """
+            UPDATE meetings
+            SET title = $2, meeting_url = $3, join_at = $4, calendar_end_at = $5,
+                status = $6, error_message = NULL, updated_at = NOW()
+            WHERE calendar_event_id = $1 AND status = $7 AND bot_id IS NULL
+            RETURNING *
+            """,
+            event_id, title, meeting_url, join_at, end_at, status.value, MeetingStatus.FAILED.value,
+        )
+        return cls(**dict(row)) if row else None
+
+    async def clear_calendar_bot(self, reason: str) -> None:
+        await execute_command(
+            """
+            UPDATE meetings
+            SET bot_id = NULL, bot_state = NULL, status = $2, error_message = $3, updated_at = NOW()
+            WHERE meeting_id = $1
+            """,
+            self.meeting_id, MeetingStatus.FAILED.value, reason,
+        )
+        self.bot_id, self.bot_state = None, None
+        self.status, self.error_message = MeetingStatus.FAILED.value, reason
+
+    @classmethod
     async def list_page(
         cls,
         search: Optional[str],
         status: Optional[MeetingStatus],
         platform: Optional[MeetingPlatform],
+        join_from: Optional[datetime],
+        join_until: Optional[datetime],
         sort_by: MeetingSortBy,
         sort_order: SortOrder,
         limit: int,
         offset: int,
     ) -> tuple[List["Meeting"], int]:
-        where, args = _meeting_filters(search, status, platform)
+        where, args = _meeting_filters(search, status, platform, join_from, join_until)
         total_row = await execute_query_one(
             f"SELECT COUNT(*) AS total FROM meetings{where}", *args
         )
         if sort_order == SortOrder.LATEST:
-            ordering = "created_at DESC"
+            ordering = "join_at DESC" if sort_by == MeetingSortBy.JOIN_AT else "created_at DESC"
         elif sort_order == SortOrder.OLDEST:
-            ordering = "created_at ASC"
+            ordering = "join_at ASC" if sort_by == MeetingSortBy.JOIN_AT else "created_at ASC"
         else:
             direction = "ASC" if sort_order == SortOrder.A_TO_Z else "DESC"
             ordering = f"{_SORT_COLUMNS[sort_by]} {direction}"
@@ -296,6 +387,8 @@ class Meeting:
         data = self.to_dict()
         data.pop("minutes")
         data.pop("ended_at")
+        data["calendar_synced"] = self.calendar_event_id is not None
+        data["ends_at"] = self.calendar_end_at.isoformat() if self.calendar_end_at else None
         return data
 
 

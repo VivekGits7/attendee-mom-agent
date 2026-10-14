@@ -82,4 +82,10 @@ def test_email_escapes_html_and_lists_outcomes():
     assert "&lt;script&gt;" in html_body
     assert "Write tests — Vivek (Due: Friday)" in text_body
     assert "Ship Friday" in text_body
-    assert "<h3>Outcomes</h3>" in html_body
+    assert "Outcomes<span" in html_body
+    assert "Open questions<span" in html_body
+    assert "background:#080808" in html_body
+    assert "background:#edf4ff" in html_body
+    assert "Sprint &lt;planning&gt;" in html_body
+    assert "Owner: Vivek" in html_body
+    assert "Due: Friday" in html_body

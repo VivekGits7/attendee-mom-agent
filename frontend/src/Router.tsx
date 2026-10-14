@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 const Home = lazy(() => import('@/App'));
 const MeetingsPage = lazy(() => import('@/meeting/MeetingsPage'));
 const MeetingDetailPage = lazy(() => import('@/meeting/MeetingDetailPage'));
+const CalendarPage = lazy(() => import('@/meeting/CalendarPage'));
 
 export default function Router() {
   return (
@@ -12,6 +13,7 @@ export default function Router() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/meetings" element={<MeetingsPage />} />
+          <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/meetings/:meetingId" element={<MeetingDetailPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

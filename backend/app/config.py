@@ -89,6 +89,17 @@ class Settings(BaseSettings):
         default=10, description="Poll interval for the final transcript"
     )
 
+    # MICROSOFT TEAMS CALENDAR
+    MICROSOFT_TENANT_ID: str = Field(default="", description="Microsoft Entra tenant ID")
+    MICROSOFT_CLIENT_ID: str = Field(default="", description="Microsoft Entra app ID")
+    MICROSOFT_CLIENT_SECRET: str = Field(default="", description="Microsoft Entra app secret")
+    TEAMS_CALENDAR_ENABLED: bool = Field(default=False, description="Watch the notetaker mailbox calendar")
+    TEAMS_CALENDAR_MAILBOX: EmailStr = Field(
+        default="MOM@tcgdigital.com", description="Mailbox invited to Teams meetings"
+    )
+    TEAMS_CALENDAR_POLL_SECONDS: int = Field(default=60, ge=15, description="Calendar check interval in seconds")
+    TEAMS_CALENDAR_LOOKAHEAD_DAYS: int = Field(default=28, ge=1, le=28, description="Days of future meetings to check")
+
     # OPENAI
     OPENAI_API_KEY: str = Field(default="", description="OpenAI API key")
     OPENAI_MOM_MODEL: str = Field(

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi import BackgroundTasks
 
-from app.attendee import AttendeeBot, AttendeeUtterance, AttendeeWebhookEnvelope
+from app.attendee import AttendeeBot, AttendeeTrigger, AttendeeUtterance, AttendeeWebhookEnvelope
 from app.error import ConflictException, ExternalServiceException
 from app.meeting import service as meeting_service
 from app.meeting.enums import EmailStatus, MeetingStatus, NoTranscriptReason
@@ -65,6 +65,19 @@ UTTERANCE_DATA = {
     "duration_ms": 2000,
     "transcription": {"transcript": "Let's cook."},
 }
+
+
+async def test_old_bot_webhook_is_ignored_after_calendar_reschedule(monkeypatch):
+    meeting = make_meeting(bot_id="bot-new", calendar_event_id="calendar-event")
+    old_event = envelope(AttendeeTrigger.BOT_STATE_CHANGE.value, {}, meeting)
+    old_event.bot_id = "bot-old"
+    monkeypatch.setattr(
+        meeting_service.Meeting, "find_by_id", AsyncMock(return_value=meeting)
+    )
+
+    result = await meeting_service._find_meeting_for_webhook(old_event)
+
+    assert result is None
 
 
 class TestDeliverMinutes:

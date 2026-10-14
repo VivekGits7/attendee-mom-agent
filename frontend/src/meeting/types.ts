@@ -18,6 +18,8 @@ export interface Meeting {
   status: MeetingStatus;
   recipient_email: string | null;
   join_at: string | null;
+  ends_at: string | null;
+  calendar_synced: boolean;
   email_status: EmailStatus;
   email_sent_to: string | null;
   error_message: string | null;
@@ -59,7 +61,9 @@ export interface MeetingFilters {
   search?: string;
   status?: MeetingStatus;
   platform?: Meeting['platform'];
-  sort_by?: 'title' | 'status' | 'created_at';
+  join_from?: string;
+  join_until?: string;
+  sort_by?: 'title' | 'status' | 'created_at' | 'join_at';
   sort_order?: 'latest' | 'oldest' | 'a_to_z' | 'z_to_a';
   limit?: number;
   offset?: number;

@@ -104,8 +104,9 @@ async def test_list_meetings_passes_filters_and_pagination(client, api_headers, 
     assert list_service.await_args.args[0] == "sprint"
     assert list_service.await_args.args[1].value == "joining"
     assert list_service.await_args.args[2].value == "google_meet"
-    assert list_service.await_args.args[4].value == "a_to_z"
-    assert list_service.await_args.args[5:] == (5, 2)
+    assert list_service.await_args.args[3:5] == (None, None)
+    assert list_service.await_args.args[6].value == "a_to_z"
+    assert list_service.await_args.args[7:] == (5, 2)
 
 
 async def test_list_meetings_rejects_invalid_sort(client, api_headers):

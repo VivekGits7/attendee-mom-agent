@@ -2,6 +2,8 @@ CREATE TABLE IF NOT EXISTS meetings (
     meeting_id UUID PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
     meeting_url TEXT NOT NULL,
+    calendar_event_id TEXT UNIQUE,
+    calendar_end_at TIMESTAMPTZ,
     platform VARCHAR(32) NOT NULL,
     bot_id VARCHAR(64) UNIQUE,
     bot_state VARCHAR(64),

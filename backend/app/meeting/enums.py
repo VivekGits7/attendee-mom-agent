@@ -31,6 +31,7 @@ class MeetingSortBy(str, Enum):
     TITLE = "title"
     STATUS = "status"
     CREATED_AT = "created_at"
+    JOIN_AT = "join_at"
 
 
 class NoTranscriptReason(str, Enum):

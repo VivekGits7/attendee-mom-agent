@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 from typing import List, Optional
 
 from fastapi import BackgroundTasks
@@ -79,13 +80,15 @@ async def list_meetings(
     search: Optional[str],
     status: Optional[MeetingStatus],
     platform: Optional[MeetingPlatform],
+    join_from: Optional[datetime],
+    join_until: Optional[datetime],
     sort_by: MeetingSortBy,
     sort_order: SortOrder,
     limit: int,
     offset: int,
 ) -> tuple[List[MeetingData], int]:
     meetings, total = await Meeting.list_page(
-        search, status, platform, sort_by, sort_order, limit, offset
+        search, status, platform, join_from, join_until, sort_by, sort_order, limit, offset
     )
     return [MeetingData(**meeting.to_public_dict()) for meeting in meetings], total
 
@@ -217,6 +220,14 @@ async def _find_meeting_for_webhook(
     if is_valid_uuid(meeting_id):
         meeting = await Meeting.find_by_id(str(meeting_id))
         if meeting is not None:
+            if meeting.bot_id and meeting.bot_id != envelope.bot_id:
+                return None
+            if (
+                meeting.calendar_event_id
+                and meeting.bot_id is None
+                and meeting.status == MeetingStatus.FAILED.value
+            ):
+                return None
             return meeting
     return await Meeting.find_by_bot_id(envelope.bot_id) if envelope.bot_id else None
 

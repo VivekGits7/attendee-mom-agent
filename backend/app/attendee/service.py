@@ -118,3 +118,14 @@ async def has_participants(bot_id: str) -> bool:
 
 async def leave_bot(bot_id: str) -> None:
     await _request("POST", f"/bots/{bot_id}/leave")
+
+
+async def update_scheduled_bot(bot_id: str, meeting_url: str, join_at: datetime) -> AttendeeBot:
+    response = await _request(
+        "PATCH", f"/bots/{bot_id}", json={"meeting_url": meeting_url, "join_at": join_at.isoformat()}
+    )
+    return AttendeeBot.model_validate(response.json())
+
+
+async def delete_scheduled_bot(bot_id: str) -> None:
+    await _request("DELETE", f"/bots/{bot_id}")

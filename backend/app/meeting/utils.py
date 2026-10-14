@@ -51,10 +51,8 @@ def build_transcript_text(utterances: Iterable) -> str:
     return "\n".join(lines)
 
 
-def _html_list(items: list[str]) -> str:
-    if not items:
-        return "<p>Nothing recorded.</p>"
-    return "<ul>" + "".join(f"<li>{html.escape(item)}</li>" for item in items) + "</ul>"
+def _email_text(value: str) -> str:
+    return html.escape(value).replace("\n", "<br>")
 
 
 def render_minutes_email(
@@ -69,14 +67,64 @@ def render_minutes_email(
         for outcome in minutes.outcomes
     ]
 
-    html_body = (
-        "<div style='font-family:Arial,sans-serif;font-size:14px;color:#222'>"
-        f"<h2>{html.escape(title)}</h2><p><b>Date:</b> {meeting_date}</p>"
-        f"<h3>Summary</h3><p>{html.escape(minutes.summary)}</p>"
-        f"<h3>Outcomes</h3>{_html_list(outcomes)}"
-        f"<h3>Open questions</h3>{_html_list(minutes.open_questions)}"
-        "</div>"
-    )
+    outcome_rows = "".join(
+        "<tr><td style='padding:15px 0;border-bottom:1px solid #e5ebea;vertical-align:top'>"
+        "<table role='presentation' cellpadding='0' cellspacing='0' width='100%'><tr>"
+        f"<td style='width:28px;color:#2d81ff;font-size:12px;font-weight:700;vertical-align:top'>{index:02d}</td>"
+        "<td style='color:#253238;font-size:15px;line-height:1.5'>"
+        f"<strong style='font-weight:600'>{_email_text(outcome.item)}</strong>"
+        + (
+            f"<div style='margin-top:5px;color:#728187;font-size:12px'>Owner: {_email_text(outcome.owner)}</div>"
+            if outcome.owner else ""
+        )
+        + (
+            f"<div style='margin-top:3px;color:#728187;font-size:12px'>Due: {_email_text(outcome.due_date)}</div>"
+            if outcome.due_date else ""
+        )
+        + "</td></tr></table></td></tr>"
+        for index, outcome in enumerate(minutes.outcomes, start=1)
+    ) or "<tr><td style='padding:14px 0;color:#728187;font-size:14px'>No outcomes recorded.</td></tr>"
+    question_rows = "".join(
+        "<tr><td style='padding:11px 0;border-bottom:1px solid #e5ebea;color:#344249;font-size:14px;line-height:1.5'>"
+        f"<span style='color:#2d81ff;font-weight:700;margin-right:10px'>{index:02d}</span>{_email_text(question)}"
+        "</td></tr>"
+        for index, question in enumerate(minutes.open_questions, start=1)
+    ) or "<tr><td style='padding:12px 0;color:#728187;font-size:14px'>No open questions.</td></tr>"
+
+    html_body = f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f2f3f0;font-family:Arial,Helvetica,sans-serif;color:#253238">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#f2f3f0"><tr><td align="center" style="padding:28px 12px">
+    <table role="presentation" cellpadding="0" cellspacing="0" width="640" style="width:100%;max-width:640px;background:#ffffff;border:1px solid #dce3e2">
+      <tr><td style="padding:26px 34px;background:#080808;color:#ffffff">
+        <span style="display:inline-block;width:10px;height:10px;margin-right:10px;background:#2d81ff;vertical-align:middle"></span>
+        <span style="font-size:13px;font-weight:700;letter-spacing:2px;vertical-align:middle">ATTENDEE <span style="color:#8b9ba5;font-weight:400">/ STUDIO</span></span>
+      </td></tr>
+      <tr><td style="padding:36px 34px 18px">
+        <p style="margin:0 0 12px;color:#2d81ff;font-size:11px;font-weight:700;letter-spacing:2px">MEETING NOTES / {meeting_date.upper()}</p>
+        <h1 style="margin:0;color:#17262e;font-size:30px;line-height:1.15;font-weight:600;letter-spacing:-1px">{_email_text(title)}</h1>
+        <p style="margin:13px 0 0;color:#728187;font-size:14px;line-height:1.5">The conversation, decisions, and next steps in one place.</p>
+      </td></tr>
+      <tr><td style="padding:18px 34px 0">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#edf4ff;border-left:3px solid #2d81ff"><tr><td style="padding:21px 23px">
+          <p style="margin:0 0 8px;color:#2d66a4;font-size:11px;font-weight:700;letter-spacing:1.5px">01 / SUMMARY</p>
+          <p style="margin:0;color:#253238;font-size:16px;line-height:1.6">{_email_text(minutes.summary)}</p>
+        </td></tr></table>
+      </td></tr>
+      <tr><td style="padding:32px 34px 0">
+        <h2 style="margin:0 0 9px;color:#17262e;font-size:21px;font-weight:600;letter-spacing:-.5px">Outcomes<span style="color:#2d81ff">.</span></h2>
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%">{outcome_rows}</table>
+      </td></tr>
+      <tr><td style="padding:32px 34px 40px">
+        <h2 style="margin:0 0 9px;color:#17262e;font-size:21px;font-weight:600;letter-spacing:-.5px">Open questions<span style="color:#2d81ff">.</span></h2>
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%">{question_rows}</table>
+      </td></tr>
+      <tr><td style="padding:21px 34px;background:#080808;color:#9da6aa;font-size:12px;line-height:1.5">
+        <strong style="color:#ffffff;letter-spacing:1px">ATTENDEE / STUDIO</strong><br>Meetings, made useful.
+      </td></tr>
+    </table>
+  </td></tr></table>
+</body></html>"""
 
     text_lines = [
         title,

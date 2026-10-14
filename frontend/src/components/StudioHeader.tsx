@@ -19,7 +19,7 @@ export function StudioHeader() {
   return (
     <header className="site-header">
       <Link className="brand" to="/" aria-label="Meeting Console home"><span className="brand-mark"><span /><span /><span /></span><span>ATTENDEE<span className="brand-light"> / STUDIO</span></span></Link>
-      <nav className="header-nav" aria-label="Main navigation"><NavLink to="/" end>01 / Create</NavLink><NavLink to="/meetings">02 / Meetings</NavLink></nav>
+      <nav className="header-nav" aria-label="Main navigation"><NavLink to="/" end>01 / Create</NavLink><NavLink to="/meetings">02 / Meetings</NavLink><NavLink to="/calendar">03 / Calendar</NavLink></nav>
       <div className={`connection ${backendOnline === true ? 'online' : backendOnline === false ? 'offline' : ''}`}><span className="connection-dot" />{backendOnline === null ? 'Checking backend' : backendOnline ? 'Backend online' : 'Backend offline'}</div>
     </header>
   );

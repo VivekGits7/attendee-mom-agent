@@ -66,4 +66,8 @@ bun run dev
 
 Open http://127.0.0.1:3000. The backend URL and API key come from `frontend/.env`. Stop the frontend with `Ctrl+C`. For a production bundle, run `bun run build`.
 
-Use `/meetings` for the searchable list and `/meetings/<meeting-id>` for the live transcript and completed MOM.
+Use `/calendar` to see upcoming bot joins, `/meetings` for the searchable list, and `/meetings/<meeting-id>` for the live transcript and completed MOM. The calendar refreshes every 30 seconds while open. MOM emails use the studio's visual theme.
+
+## Automatic Teams calendar joins
+
+See [backend/TEAMS_CALENDAR.md](backend/TEAMS_CALENDAR.md) to register the Microsoft Entra app, grant calendar permission, and set `backend/.env`. Once the migration is approved and applied, start the backend normally. Invite `MOM@tcgdigital.com` to a scheduled Teams meeting; the bot will be scheduled from its calendar event. For an unscheduled live call, copy the Teams meeting link into the Meeting Console.

@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 
 from fastapi import (
@@ -62,6 +63,7 @@ webhook_router = APIRouter(prefix="/api/webhooks", tags=["Webhooks"])
     responses={
         **COMMON_ERROR_RESPONSES,
         200: {"model": MeetingListResponse, "description": "Filtered meeting page"},
+        400: {"model": BadRequestResponse, "description": "Invalid join time range"},
     },
 )
 @limiter.limit("30/minute")
@@ -76,8 +78,14 @@ async def list_meetings_endpoint(
     platform: Optional[MeetingPlatform] = Query(
         None, description="Filter by meeting platform"
     ),
+    join_from: Optional[datetime] = Query(
+        None, description="Include joins at or after this ISO 8601 time with timezone"
+    ),
+    join_until: Optional[datetime] = Query(
+        None, description="Include joins before this ISO 8601 time with timezone"
+    ),
     sort_by: MeetingSortBy = Query(
-        MeetingSortBy.TITLE, description="Field used for alphabetical sorting"
+        MeetingSortBy.TITLE, description="Field used for sorting"
     ),
     sort_order: SortOrder = Query(
         SortOrder.LATEST, description="Sort as latest, oldest, a_to_z, or z_to_a"
@@ -91,15 +99,21 @@ async def list_meetings_endpoint(
     - **search**: optional partial match on title or recipient email
     - **status**: optional, scheduled, joining, in_progress, processing, completed, or failed
     - **platform**: optional, google_meet or teams
-    - **sort_by**: title, status, or created_at, used with alphabetical sort
+    - **join_from**: optional ISO 8601 time with timezone, inclusive scheduled join filter
+    - **join_until**: optional ISO 8601 time with timezone, exclusive scheduled join filter
+    - **sort_by**: title, status, created_at, or join_at
     - **sort_order**: latest, oldest, a_to_z, or z_to_a, defaults to latest
     - **limit**: 1 to 100 meetings per page, defaults to 20
     - **offset**: number of matching meetings to skip, defaults to 0
     - header **X-API-Key** is required
     """
     try:
+        if (join_from and join_from.tzinfo is None) or (join_until and join_until.tzinfo is None):
+            raise BadRequestException("Join time filters must include a timezone")
+        if join_from and join_until and join_from >= join_until:
+            raise BadRequestException("join_from must be before join_until")
         meetings, total = await list_meetings(
-            search, status, platform, sort_by, sort_order, limit, offset
+            search, status, platform, join_from, join_until, sort_by, sort_order, limit, offset
         )
         return MeetingListResponse(
             success=True,

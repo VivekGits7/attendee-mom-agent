@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
@@ -20,6 +21,7 @@ from app.error import setup_error_handlers
 from app.limiter import limiter
 from app.logger import get_logger, setup_logging
 from app.meeting import meeting_router, webhook_router
+from app.meeting.calendar import run_teams_calendar_sync
 from app.middleware import RequestLoggingMiddleware, SecurityHeadersMiddleware
 
 load_dotenv()
@@ -31,10 +33,25 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     await create_db_pool()
     logger.info("Database pool created")
-    yield
-    await close_attendee_client()
-    await close_db_pool()
-    logger.info("Database pool closed")
+    calendar_task = None
+    if settings.TEAMS_CALENDAR_ENABLED:
+        if all((settings.MICROSOFT_TENANT_ID, settings.MICROSOFT_CLIENT_ID, settings.MICROSOFT_CLIENT_SECRET)):
+            calendar_task = asyncio.create_task(run_teams_calendar_sync())
+            logger.info("Teams calendar watcher started")
+        else:
+            logger.error("Teams calendar watcher needs Microsoft tenant, client ID, and client secret")
+    try:
+        yield
+    finally:
+        if calendar_task:
+            calendar_task.cancel()
+            try:
+                await calendar_task
+            except asyncio.CancelledError:
+                pass
+        await close_attendee_client()
+        await close_db_pool()
+        logger.info("Database pool closed")
 
 
 app = FastAPI(
