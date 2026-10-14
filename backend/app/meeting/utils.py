@@ -35,6 +35,9 @@ def format_timestamp(timestamp_ms: int) -> str:
 
 
 def build_transcript_text(utterances: Iterable) -> str:
+    utterances = list(utterances)
+    # Attendee timestamps are Unix time in ms, so each line is labelled with time since the first one.
+    start_ms = min((utterance.timestamp_ms for utterance in utterances), default=0)
     lines: list[str] = []
     last_speaker: Optional[str] = None
     for utterance in utterances:
@@ -42,7 +45,7 @@ def build_transcript_text(utterances: Iterable) -> str:
             lines[-1] += f" {utterance.text}"
             continue
         lines.append(
-            f"[{format_timestamp(utterance.timestamp_ms)}] {utterance.speaker_name}: {utterance.text}"
+            f"[{format_timestamp(utterance.timestamp_ms - start_ms)}] {utterance.speaker_name}: {utterance.text}"
         )
         last_speaker = utterance.speaker_name
     return "\n".join(lines)
@@ -59,29 +62,18 @@ def render_minutes_email(
 ) -> Tuple[str, str, str]:
     meeting_date = (ended_at or datetime.now(timezone.utc)).strftime("%d %b %Y")
     subject = f"MOM: {title} ({meeting_date})"
-
-    action_rows = "".join(
-        f"<tr><td>{html.escape(a.task)}</td><td>{html.escape(a.owner)}</td>"
-        f"<td>{html.escape(a.due_date)}</td><td>{a.priority.value}</td></tr>"
-        for a in minutes.action_items
-    )
-    actions_html = (
-        "<table border='1' cellpadding='6' cellspacing='0' style='border-collapse:collapse'>"
-        "<tr><th>Task</th><th>Owner</th><th>Due</th><th>Priority</th></tr>"
-        f"{action_rows}</table>"
-        if minutes.action_items
-        else "<p>No action items.</p>"
-    )
-    decisions = [f"{d.decision}, by {d.made_by}" for d in minutes.decisions]
+    outcomes = [
+        f"{outcome.item}"
+        f"{' — ' + outcome.owner if outcome.owner else ''}"
+        f"{' (Due: ' + outcome.due_date + ')' if outcome.due_date else ''}"
+        for outcome in minutes.outcomes
+    ]
 
     html_body = (
         "<div style='font-family:Arial,sans-serif;font-size:14px;color:#222'>"
         f"<h2>{html.escape(title)}</h2><p><b>Date:</b> {meeting_date}</p>"
-        f"<p><b>Attendees:</b> {html.escape(', '.join(minutes.attendees))}</p>"
         f"<h3>Summary</h3><p>{html.escape(minutes.summary)}</p>"
-        f"<h3>Action items</h3>{actions_html}"
-        f"<h3>Decisions</h3>{_html_list(decisions)}"
-        f"<h3>Key points</h3>{_html_list(minutes.key_points)}"
+        f"<h3>Outcomes</h3>{_html_list(outcomes)}"
         f"<h3>Open questions</h3>{_html_list(minutes.open_questions)}"
         "</div>"
     )
@@ -89,22 +81,12 @@ def render_minutes_email(
     text_lines = [
         title,
         f"Date: {meeting_date}",
-        f"Attendees: {', '.join(minutes.attendees)}",
         "",
         "SUMMARY",
         minutes.summary,
         "",
-        "ACTION ITEMS",
-        *[
-            f"- {a.task} | {a.owner} | {a.due_date} | {a.priority.value}"
-            for a in minutes.action_items
-        ],
-        "",
-        "DECISIONS",
-        *[f"- {d}" for d in decisions],
-        "",
-        "KEY POINTS",
-        *[f"- {p}" for p in minutes.key_points],
+        "OUTCOMES",
+        *[f"- {outcome}" for outcome in outcomes],
         "",
         "OPEN QUESTIONS",
         *[f"- {q}" for q in minutes.open_questions],

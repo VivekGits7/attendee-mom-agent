@@ -1,32 +1,39 @@
-from typing import List
+from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-from app.mom.enums import ActionPriority
-
-# No field examples here because this schema goes to OpenAI strict mode, Swagger examples live on the response models.
-
-
-class Decision(BaseModel):
-    decision: str = Field(..., description="What was decided")
-    made_by: str = Field(..., description="Speaker who confirmed it, or Group")
-
-
-class ActionItem(BaseModel):
-    task: str = Field(..., description="Task written as a clear action")
-    owner: str = Field(..., description="Owner name from the transcript, or Unassigned")
-    due_date: str = Field(..., description="Deadline as spoken, or Not specified")
-    priority: ActionPriority = Field(..., description="Task urgency")
+class Outcome(BaseModel):
+    item: str = Field(..., description="Decision or assigned action from the meeting")
+    owner: Optional[str] = Field(..., description="Person responsible, if one was named")
+    due_date: Optional[str] = Field(..., description="Deadline exactly as spoken, if any")
 
 
 class MeetingMinutes(BaseModel):
-    summary: str = Field(
-        ..., description="Three to six sentence summary of the meeting"
-    )
-    key_points: List[str] = Field(..., description="Important topics and facts")
-    decisions: List[Decision] = Field(..., description="Decisions taken in the meeting")
-    action_items: List[ActionItem] = Field(
-        ..., description="Tasks with owner and deadline"
-    )
-    open_questions: List[str] = Field(..., description="Questions left unanswered")
-    attendees: List[str] = Field(..., description="Distinct speaker names")
+    summary: str = Field(..., description="One or two sentences about the meeting result")
+    outcomes: list[Outcome] = Field(..., description="Decisions and assigned actions")
+    open_questions: list[str] = Field(..., description="Questions left unresolved")
+
+    @model_validator(mode="before")
+    @classmethod
+    def read_older_minutes(cls, value):
+        if not isinstance(value, dict) or "outcomes" in value:
+            return value
+        if "decisions" not in value and "action_items" not in value:
+            return value
+        outcomes = [
+            {"item": decision["decision"], "owner": None, "due_date": None}
+            for decision in value.get("decisions", [])
+        ]
+        outcomes.extend(
+            {
+                "item": action["task"],
+                "owner": None if action.get("owner") in (None, "Unassigned") else action["owner"],
+                "due_date": None if action.get("due_date") in (None, "Not specified") else action["due_date"],
+            }
+            for action in value.get("action_items", [])
+        )
+        return {
+            "summary": value.get("summary", ""),
+            "outcomes": outcomes,
+            "open_questions": value.get("open_questions", []),
+        }

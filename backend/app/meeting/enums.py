@@ -31,3 +31,10 @@ class MeetingSortBy(str, Enum):
     TITLE = "title"
     STATUS = "status"
     CREATED_AT = "created_at"
+
+
+class NoTranscriptReason(str, Enum):
+    NOBODY_JOINED = "Nobody else joined the meeting while the bot was there"
+    NO_WORDS = "The bot heard the meeting but no words came through. Check that speakers were unmuted and their mic was loud enough"
+    TRANSCRIPTION_FAILED = "Transcription failed in the meeting bot service. Check the transcription provider key in Attendee"
+    UNKNOWN = "No transcript came back from the meeting bot service"

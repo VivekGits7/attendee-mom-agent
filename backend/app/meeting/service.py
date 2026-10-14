@@ -3,7 +3,6 @@ from typing import List, Optional
 
 from fastapi import BackgroundTasks
 
-from app.common import SortOrder
 from app.attendee import (
     AttendeeBotState,
     AttendeeStateChange,
@@ -15,8 +14,10 @@ from app.attendee import (
     create_bot,
     get_bot,
     get_transcript,
+    has_participants,
     leave_bot,
 )
+from app.common import SortOrder
 from app.config import settings
 from app.error import (
     ConflictException,
@@ -31,6 +32,7 @@ from app.meeting.enums import (
     MeetingPlatform,
     MeetingSortBy,
     MeetingStatus,
+    NoTranscriptReason,
     UtteranceSource,
 )
 from app.meeting.model import AttendeeWebhookEvent, Meeting, MeetingUtterance
@@ -51,6 +53,10 @@ from app.mom import MeetingMinutes, generate_minutes
 logger = get_logger(__name__)
 
 FINAL_BOT_STATES = {AttendeeBotState.ENDED.value, AttendeeBotState.FATAL_ERROR.value}
+LEFT_BOT_STATES = FINAL_BOT_STATES | {
+    AttendeeBotState.LEAVING.value,
+    AttendeeBotState.POST_PROCESSING.value,
+}
 CLOSED_MEETING_STATUSES = {
     MeetingStatus.PROCESSING.value,
     MeetingStatus.COMPLETED.value,
@@ -116,7 +122,7 @@ async def get_meeting_detail(meeting_id: str) -> MeetingDetailData:
 
 async def request_bot_leave(meeting_id: str) -> MeetingData:
     meeting = await _get_meeting_or_404(meeting_id)
-    if not meeting.bot_id or meeting.bot_state in FINAL_BOT_STATES:
+    if not meeting.bot_id or meeting.bot_state in LEFT_BOT_STATES:
         raise ConflictException("The bot is not in this meeting anymore")
     await leave_bot(meeting.bot_id)
     await meeting.update_progress(AttendeeBotState.LEAVING.value, None)
@@ -168,14 +174,12 @@ async def finalize_meeting(meeting_id: str) -> None:
         await _sync_final_transcript(meeting)
         utterances = await MeetingUtterance.list_by_meeting(meeting.meeting_id)
         if not utterances:
-            await meeting.mark_status(
-                MeetingStatus.FAILED, "No speech was captured in this meeting"
-            )
+            reason = await _no_transcript_reason(meeting)
+            logger.warning(f"No transcript for meeting {meeting_id}: {reason.name}")
+            await meeting.mark_status(MeetingStatus.FAILED, reason.value)
             return
 
-        minutes = await generate_minutes(
-            meeting.title, build_transcript_text(utterances)
-        )
+        minutes = await generate_minutes(build_transcript_text(utterances))
         await meeting.save_minutes(minutes.model_dump(mode="json"))
         await meeting.mark_status(MeetingStatus.COMPLETED)
         logger.info(f"Minutes ready for meeting {meeting_id}")
@@ -235,14 +239,36 @@ async def _apply_state_change(
     logger.info(
         f"Meeting {meeting.meeting_id} bot {change.old_state} -> {change.new_state} {change.event_sub_type or ''}"
     )
-    await meeting.update_progress(
-        change.new_state, BOT_STATE_TO_MEETING_STATUS.get(change.new_state)
+    applied = await meeting.update_progress(
+        change.new_state,
+        BOT_STATE_TO_MEETING_STATUS.get(change.new_state),
+        change.created_at,
     )
+    if not applied:
+        logger.info(
+            f"Skipped stale bot state {change.new_state} for meeting {meeting.meeting_id}"
+        )
+        return
 
     if change.new_state in FINAL_BOT_STATES and await Meeting.claim_for_processing(
         meeting.meeting_id
     ):
         background_tasks.add_task(finalize_meeting, str(meeting.meeting_id))
+
+
+# Attendee drops empty and failed lines from its transcript, so ask the bot why nothing came back.
+async def _no_transcript_reason(meeting: Meeting) -> NoTranscriptReason:
+    if not meeting.bot_id:
+        return NoTranscriptReason.UNKNOWN
+    try:
+        bot = await get_bot(meeting.bot_id)
+        if bot.transcription_state == AttendeeTranscriptionState.FAILED.value:
+            return NoTranscriptReason.TRANSCRIPTION_FAILED
+        if not await has_participants(meeting.bot_id):
+            return NoTranscriptReason.NOBODY_JOINED
+    except ExternalServiceException:
+        return NoTranscriptReason.UNKNOWN
+    return NoTranscriptReason.NO_WORDS
 
 
 async def _wait_for_final_transcript(bot_id: str) -> None:

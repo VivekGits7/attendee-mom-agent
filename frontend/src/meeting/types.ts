@@ -34,11 +34,8 @@ export interface Utterance {
 
 export interface Minutes {
   summary: string;
-  key_points: string[];
-  decisions: { decision: string; made_by: string }[];
-  action_items: { task: string; owner: string; due_date: string; priority: string }[];
+  outcomes: { item: string; owner: string | null; due_date: string | null }[];
   open_questions: string[];
-  attendees: string[];
 }
 
 export interface MeetingDetail extends Meeting {

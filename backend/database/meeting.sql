@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS meetings (
     platform VARCHAR(32) NOT NULL,
     bot_id VARCHAR(64) UNIQUE,
     bot_state VARCHAR(64),
+    bot_state_changed_at TIMESTAMPTZ,
     status VARCHAR(32) NOT NULL,
     recipient_email VARCHAR(320),
     join_at TIMESTAMPTZ,

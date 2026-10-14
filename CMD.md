@@ -64,6 +64,6 @@ bun install
 bun run dev
 ```
 
-Open http://127.0.0.1:3000 and paste `INTERNAL_API_KEY` from `backend/.env` into the page. Stop the frontend with `Ctrl+C`. For a production bundle, run `bun run build`.
+Open http://127.0.0.1:3000. The backend URL and API key come from `frontend/.env`. Stop the frontend with `Ctrl+C`. For a production bundle, run `bun run build`.
 
 Use `/meetings` for the searchable list and `/meetings/<meeting-id>` for the live transcript and completed MOM.

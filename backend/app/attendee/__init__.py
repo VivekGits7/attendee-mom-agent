@@ -16,6 +16,7 @@ from app.attendee.service import (
     create_bot,
     get_bot,
     get_transcript,
+    has_participants,
     leave_bot,
 )
 from app.attendee.utils import sign_attendee_payload, verify_attendee_signature

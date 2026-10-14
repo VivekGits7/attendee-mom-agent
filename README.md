@@ -1,6 +1,6 @@
 # Attendee MOM Agent
 
-This project sends an Attendee bot into Google Meet or Microsoft Teams meetings, stores the transcript, and produces meeting minutes with action items and an email delivery result.
+This project sends an Attendee bot into Google Meet or Microsoft Teams meetings, stores the transcript, and produces concise meeting minutes with outcomes and an email delivery result.
 
 | Folder | Purpose |
 | --- | --- |
@@ -18,9 +18,9 @@ bun install
 bun run dev
 ```
 
-Open <http://127.0.0.1:3000>. Enter `INTERNAL_API_KEY` from `backend/.env` in the app. The key stays in memory for the current tab.
+Open <http://127.0.0.1:3000>. The frontend reads the backend URL and API key from `frontend/.env`, see `frontend/.env.example`.
 
-- `/` creates a meeting.
+- `/` creates a meeting and lists your latest meetings, click one to see its transcript.
 - `/meetings` lists saved meetings with search, filters, sorting, and pagination.
 - `/meetings/:meetingId` follows the transcript and shows the completed MOM, email result, and bot controls.
 

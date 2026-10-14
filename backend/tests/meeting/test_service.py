@@ -7,26 +7,16 @@ import pytest
 from fastapi import BackgroundTasks
 
 from app.attendee import AttendeeBot, AttendeeUtterance, AttendeeWebhookEnvelope
-from app.error import ExternalServiceException
+from app.error import ConflictException, ExternalServiceException
 from app.meeting import service as meeting_service
-from app.meeting.enums import EmailStatus, MeetingStatus
+from app.meeting.enums import EmailStatus, MeetingStatus, NoTranscriptReason
 from app.meeting.model import Meeting
-from app.mom import ActionItem, ActionPriority, MeetingMinutes
+from app.mom import MeetingMinutes, Outcome
 
 MINUTES = MeetingMinutes(
     summary="Sprint scope agreed.",
-    key_points=["Payments API is 80 percent done"],
-    decisions=[],
-    action_items=[
-        ActionItem(
-            task="Share API contract",
-            owner="Vivek",
-            due_date="Friday",
-            priority=ActionPriority.HIGH,
-        )
-    ],
+    outcomes=[Outcome(item="Share API contract", owner="Vivek", due_date="Friday")],
     open_questions=[],
-    attendees=["Vivek"],
 )
 
 
@@ -53,6 +43,7 @@ def make_meeting(**overrides) -> Meeting:
         "set_email_result",
     ):
         setattr(meeting, method, AsyncMock())
+    meeting.update_progress = AsyncMock(return_value=True)
     return meeting
 
 
@@ -170,10 +161,57 @@ class TestStateChange:
         )
 
         meeting.update_progress.assert_awaited_once_with(
-            "joined_recording", MeetingStatus.IN_PROGRESS
+            "joined_recording", MeetingStatus.IN_PROGRESS, None
         )
         claim.assert_not_awaited()
         assert tasks.tasks == []
+
+    async def test_event_time_is_passed_to_progress(self, monkeypatch):
+        monkeypatch.setattr(meeting_service.Meeting, "claim_for_processing", AsyncMock())
+        meeting = make_meeting()
+
+        await meeting_service._apply_state_change(
+            meeting,
+            {"new_state": "joined_recording", "created_at": "2026-10-13T10:28:30.572634+00:00"},
+            BackgroundTasks(),
+        )
+
+        assert meeting.update_progress.await_args.args[2] == datetime(
+            2026, 10, 13, 10, 28, 30, 572634, tzinfo=timezone.utc
+        )
+
+    async def test_stale_ended_event_does_not_finalize(self, monkeypatch):
+        claim = AsyncMock(return_value=True)
+        monkeypatch.setattr(meeting_service.Meeting, "claim_for_processing", claim)
+        tasks = BackgroundTasks()
+        meeting = make_meeting()
+        meeting.update_progress = AsyncMock(return_value=False)
+
+        await meeting_service._apply_state_change(
+            meeting,
+            {"new_state": "ended", "created_at": "2026-10-13T10:00:00+00:00"},
+            tasks,
+        )
+
+        claim.assert_not_awaited()
+        assert tasks.tasks == []
+
+
+class TestLeave:
+    @pytest.mark.parametrize("bot_state", ["leaving", "post_processing", "ended", "fatal_error"])
+    async def test_rejects_bot_that_already_left(self, monkeypatch, bot_state):
+        monkeypatch.setattr(
+            meeting_service.Meeting,
+            "find_by_id",
+            AsyncMock(return_value=make_meeting(bot_state=bot_state)),
+        )
+        leave = AsyncMock()
+        monkeypatch.setattr(meeting_service, "leave_bot", leave)
+
+        with pytest.raises(ConflictException):
+            await meeting_service.request_bot_leave(str(uuid.uuid4()))
+
+        leave.assert_not_awaited()
 
 
 class TestWebhookHandler:
@@ -250,7 +288,17 @@ class TestWebhookHandler:
 
 
 class TestFinalize:
-    async def test_no_speech_marks_failed(self, monkeypatch):
+    @pytest.mark.parametrize(
+        ("transcription_state", "joined", "reason"),
+        [
+            ("complete", True, NoTranscriptReason.NO_WORDS),
+            ("complete", False, NoTranscriptReason.NOBODY_JOINED),
+            ("failed", True, NoTranscriptReason.TRANSCRIPTION_FAILED),
+        ],
+    )
+    async def test_empty_transcript_marks_failed_with_reason(
+        self, monkeypatch, transcription_state, joined, reason
+    ):
         meeting = make_meeting()
         monkeypatch.setattr(
             meeting_service.Meeting, "find_by_id", AsyncMock(return_value=meeting)
@@ -261,15 +309,34 @@ class TestFinalize:
             "list_by_meeting",
             AsyncMock(return_value=[]),
         )
+        monkeypatch.setattr(
+            meeting_service,
+            "get_bot",
+            AsyncMock(
+                return_value=AttendeeBot(id="bot_1", transcription_state=transcription_state)
+            ),
+        )
+        monkeypatch.setattr(
+            meeting_service, "has_participants", AsyncMock(return_value=joined)
+        )
         generate = AsyncMock()
         monkeypatch.setattr(meeting_service, "generate_minutes", generate)
 
         await meeting_service.finalize_meeting(str(meeting.meeting_id))
 
-        meeting.mark_status.assert_awaited_once_with(
-            MeetingStatus.FAILED, "No speech was captured in this meeting"
-        )
+        meeting.mark_status.assert_awaited_once_with(MeetingStatus.FAILED, reason.value)
         generate.assert_not_awaited()
+
+    async def test_empty_transcript_when_attendee_is_down(self, monkeypatch):
+        monkeypatch.setattr(
+            meeting_service,
+            "get_bot",
+            AsyncMock(side_effect=ExternalServiceException()),
+        )
+
+        reason = await meeting_service._no_transcript_reason(make_meeting())
+
+        assert reason is NoTranscriptReason.UNKNOWN
 
     async def test_happy_path_saves_minutes_and_emails(self, monkeypatch):
         meeting = make_meeting()
@@ -295,7 +362,6 @@ class TestFinalize:
         await meeting_service.finalize_meeting(str(meeting.meeting_id))
 
         assert generate.await_args.args == (
-            "Sprint planning",
             "[00:00:00] Vivek: Ship it Friday.",
         )
         meeting.save_minutes.assert_awaited_once_with(MINUTES.model_dump(mode="json"))

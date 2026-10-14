@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
@@ -27,7 +28,7 @@ class AttendeeUtterance(BaseModel):
     speaker_is_host: bool = Field(
         default=False, description="Whether the speaker is the host"
     )
-    timestamp_ms: int = Field(..., description="Offset from recording start in ms")
+    timestamp_ms: int = Field(..., description="Unix time in ms when the line started")
     duration_ms: int = Field(default=0, description="Length of the utterance in ms")
     transcription: Optional[Dict[str, Any]] = Field(
         None, description="Attendee transcription object"
@@ -45,7 +46,7 @@ class AttendeeStateChange(BaseModel):
     )
     old_state: Optional[str] = Field(None, description="Previous bot state")
     new_state: str = Field(..., description="Current bot state")
-    created_at: Optional[str] = Field(None, description="When the change happened")
+    created_at: Optional[datetime] = Field(None, description="When the change happened")
 
 
 class AttendeeBot(BaseModel):

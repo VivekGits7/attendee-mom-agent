@@ -1,6 +1,14 @@
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    status,
+)
 
 from app.attendee import AttendeeWebhookEnvelope, verify_attendee_signature
 from app.common import (
@@ -59,11 +67,21 @@ webhook_router = APIRouter(prefix="/api/webhooks", tags=["Webhooks"])
 @limiter.limit("30/minute")
 async def list_meetings_endpoint(
     request: Request,
-    search: Optional[str] = Query(None, max_length=100, description="Search meeting title or recipient email"),
-    status: Optional[MeetingStatus] = Query(None, description="Filter by meeting pipeline status"),
-    platform: Optional[MeetingPlatform] = Query(None, description="Filter by meeting platform"),
-    sort_by: MeetingSortBy = Query(MeetingSortBy.TITLE, description="Field used for alphabetical sorting"),
-    sort_order: SortOrder = Query(SortOrder.LATEST, description="Sort as latest, oldest, a_to_z, or z_to_a"),
+    search: Optional[str] = Query(
+        None, max_length=100, description="Search meeting title or recipient email"
+    ),
+    status: Optional[MeetingStatus] = Query(
+        None, description="Filter by meeting pipeline status"
+    ),
+    platform: Optional[MeetingPlatform] = Query(
+        None, description="Filter by meeting platform"
+    ),
+    sort_by: MeetingSortBy = Query(
+        MeetingSortBy.TITLE, description="Field used for alphabetical sorting"
+    ),
+    sort_order: SortOrder = Query(
+        SortOrder.LATEST, description="Sort as latest, oldest, a_to_z, or z_to_a"
+    ),
     limit: int = Query(20, ge=1, le=100, description="Meetings per page"),
     offset: int = Query(0, ge=0, description="Meetings skipped before this page"),
 ) -> MeetingListResponse:
@@ -190,7 +208,10 @@ async def get_meeting_endpoint(
         200: {"model": MeetingActionResponse, "description": "Bot asked to leave"},
         400: {"model": BadRequestResponse, "description": "Malformed meeting_id"},
         404: {"model": NotFoundResponse, "description": "Meeting not found"},
-        409: {"model": ConflictResponse, "description": "Bot already left"},
+        409: {
+            "model": ConflictResponse,
+            "description": "Bot is already leaving or has left",
+        },
         502: {
             "model": BadGatewayResponse,
             "description": "Attendee refused or could not be reached",
@@ -206,6 +227,7 @@ async def leave_meeting_endpoint(
 
     - **meeting_id**: the meeting UUID, passed in the path
     - minutes and email follow automatically once Attendee reports the bot ended
+    - returns 409 when the bot is already leaving, post processing, or ended
     - header **X-API-Key** is required
     """
     try:

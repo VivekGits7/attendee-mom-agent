@@ -26,18 +26,15 @@ MEETING_EXAMPLE = {
 
 MINUTES_EXAMPLE = {
     "summary": "The team reviewed sprint scope and agreed to move the release by one week.",
-    "key_points": ["Payments API is 80 percent done"],
-    "decisions": [{"decision": "Release moves to 20 Oct", "made_by": "Group"}],
-    "action_items": [
+    "outcomes": [
         {
-            "task": "Share the API contract with the frontend team",
+            "item": "Share the API contract with the frontend team",
             "owner": "Vivek Vishwakarma",
             "due_date": "Friday",
-            "priority": "high",
-        }
+        },
+        {"item": "Move the release by one week", "owner": None, "due_date": None},
     ],
     "open_questions": ["Who owns the QA sign off"],
-    "attendees": ["Vivek Vishwakarma", "Aniruddha Patel"],
 }
 
 
@@ -149,7 +146,7 @@ class MeetingData(BaseModel):
     error_message: Optional[str] = Field(
         None,
         description="Why the pipeline failed",
-        examples=["No speech was captured in this meeting"],
+        examples=["Nobody else joined the meeting while the bot was there"],
     )
     created_at: str = Field(
         ..., description="Creation time", examples=["2026-10-11T10:30:00+00:00"]
@@ -164,7 +161,9 @@ class UtteranceData(BaseModel):
         ..., description="Whether the speaker is the host", examples=[True]
     )
     timestamp_ms: int = Field(
-        ..., description="Offset from recording start in ms", examples=[1079]
+        ...,
+        description="Unix time in ms when the line started",
+        examples=[1791887310881],
     )
     duration_ms: int = Field(..., description="Utterance length in ms", examples=[7710])
     text: str = Field(
@@ -217,7 +216,7 @@ class MeetingDetailResponse(BaseResponse):
                         {
                             "speaker_name": "Vivek Vishwakarma",
                             "speaker_is_host": True,
-                            "timestamp_ms": 1079,
+                            "timestamp_ms": 1791887310881,
                             "duration_ms": 7710,
                             "text": "Let's lock the sprint scope today.",
                         }
@@ -231,9 +230,13 @@ class MeetingDetailResponse(BaseResponse):
 
 class MeetingListResponse(BaseResponse):
     data: List[MeetingData] = Field(..., description="Meetings on this page")
-    total: int = Field(..., description="Total meetings matching the filters", examples=[42])
+    total: int = Field(
+        ..., description="Total meetings matching the filters", examples=[42]
+    )
     limit: int = Field(..., description="Maximum meetings on this page", examples=[20])
-    offset: int = Field(..., description="Meetings skipped before this page", examples=[0])
+    offset: int = Field(
+        ..., description="Meetings skipped before this page", examples=[0]
+    )
 
     model_config = ConfigDict(
         json_schema_extra={

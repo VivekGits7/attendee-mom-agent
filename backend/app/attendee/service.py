@@ -111,5 +111,10 @@ async def get_transcript(bot_id: str) -> List[AttendeeUtterance]:
     return [AttendeeUtterance.model_validate(item) for item in response.json()]
 
 
+async def has_participants(bot_id: str) -> bool:
+    response = await _request("GET", f"/bots/{bot_id}/participants")
+    return bool(response.json().get("results"))
+
+
 async def leave_bot(bot_id: str) -> None:
     await _request("POST", f"/bots/{bot_id}/leave")

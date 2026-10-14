@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import httpx
 import pytest
 
-from app.attendee import build_bot_payload, create_bot, get_transcript
+from app.attendee import build_bot_payload, create_bot, get_transcript, has_participants
 from app.attendee import service as attendee_service
 from app.config import settings
 from app.error import ExternalServiceException
@@ -124,3 +124,14 @@ async def test_get_transcript_reads_speaker_and_text(mock_attendee):
 
     assert result[0].speaker_name == "Vivek Vishwakarma"
     assert result[0].text == "Let's cook."
+
+
+@pytest.mark.parametrize(("results", "expected"), [([{"name": "Vivek"}], True), ([], False)])
+async def test_has_participants_reads_first_page(mock_attendee, results, expected):
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/v1/bots/bot_1/participants"
+        return httpx.Response(200, json={"next": None, "previous": None, "results": results})
+
+    mock_attendee(handler)
+
+    assert await has_participants("bot_1") is expected

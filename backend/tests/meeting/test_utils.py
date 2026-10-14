@@ -9,7 +9,7 @@ from app.meeting.utils import (
     format_timestamp,
     render_minutes_email,
 )
-from app.mom import ActionItem, ActionPriority, Decision, MeetingMinutes
+from app.mom import MeetingMinutes, Outcome
 
 
 @pytest.mark.parametrize(
@@ -51,21 +51,26 @@ def test_transcript_merges_same_speaker_lines():
     )
 
 
-def test_email_escapes_html_and_lists_action_items():
+def test_transcript_times_are_relative_to_first_epoch_line():
+    utterances = [
+        SimpleNamespace(speaker_name="Vivek", timestamp_ms=1_791_887_310_881, text="Hi."),
+        SimpleNamespace(speaker_name="Aniruddha", timestamp_ms=1_791_887_341_881, text="Hey."),
+    ]
+
+    assert (
+        build_transcript_text(utterances)
+        == "[00:00:00] Vivek: Hi.\n[00:00:31] Aniruddha: Hey."
+    )
+
+
+def test_email_escapes_html_and_lists_outcomes():
     minutes = MeetingMinutes(
         summary="Talked about <script>alert(1)</script>",
-        key_points=["Point one"],
-        decisions=[Decision(decision="Ship Friday", made_by="Group")],
-        action_items=[
-            ActionItem(
-                task="Write tests",
-                owner="Vivek",
-                due_date="Friday",
-                priority=ActionPriority.HIGH,
-            )
+        outcomes=[
+            Outcome(item="Write tests", owner="Vivek", due_date="Friday"),
+            Outcome(item="Ship Friday", owner=None, due_date=None),
         ],
         open_questions=[],
-        attendees=["Vivek", "Aniruddha"],
     )
 
     subject, text_body, html_body = render_minutes_email(
@@ -75,8 +80,6 @@ def test_email_escapes_html_and_lists_action_items():
     assert subject.startswith("MOM: Sprint <planning>")
     assert "<script>" not in html_body
     assert "&lt;script&gt;" in html_body
-    assert (
-        "Write tests" in html_body
-        and "Write tests | Vivek | Friday | high" in text_body
-    )
-    assert "Ship Friday, by Group" in text_body
+    assert "Write tests — Vivek (Due: Friday)" in text_body
+    assert "Ship Friday" in text_body
+    assert "<h3>Outcomes</h3>" in html_body

@@ -1,0 +1,70 @@
+.select-trigger { display: flex; align-items: center; gap: .6rem; text-align: left; cursor: pointer; }
+.select-trigger:focus-visible { outline: none; }
+.select-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select-chevron { flex: none; transition: transform .2s ease; }
+.select-trigger[aria-expanded='true'] .select-chevron { transform: rotate(180deg); }
+.select-light .select-value { color: #263337; font-size: .88rem; }
+.select-light .select-chevron { color: #6b777b; }
+.select-dark .select-chevron { color: #8d969b; }
+
+.select-menu { position: fixed; z-index: 70; margin: 0; padding: .35rem; list-style: none; overflow-y: auto; font-family: 'Outfit', sans-serif; animation: control-in .14s ease-out; }
+.select-menu.opens-up { animation-name: control-in-up; }
+.select-menu li { display: flex; align-items: center; justify-content: space-between; gap: .75rem; min-height: 38px; padding: 0 .75rem; font-size: .86rem; cursor: pointer; user-select: none; }
+.select-menu li svg { flex: none; }
+.select-menu-light { background: #fff; border: 1px solid #dce2e1; box-shadow: 0 18px 48px #0f1a2a29; color: #263337; }
+.select-menu-light li.active { background: #f0f5ff; }
+.select-menu-light li[aria-selected='true'] { color: #2d81ff; font-weight: 600; box-shadow: inset 2px 0 0 #2d81ff; }
+.select-menu-dark { background: #1b1f22; border: 1px solid #3a4044; box-shadow: 0 18px 48px #0009; color: #dfe4e6; }
+.select-menu-dark li.active { background: #263039; }
+.select-menu-dark li[aria-selected='true'] { color: #69aaff; font-weight: 600; box-shadow: inset 2px 0 0 #2d81ff; }
+
+.datetime { margin-top: .65rem; }
+.datetime-trigger { width: 100%; height: 48px; display: flex; align-items: center; gap: .65rem; padding: 0 .85rem; color: #f3f5f5; background: #101213; border: 1px solid #414547; border-radius: 2px; text-align: left; transition: border-color .2s, box-shadow .2s; }
+.datetime-trigger > svg:first-child { flex: none; color: #69aaff; }
+.datetime-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .92rem; }
+.datetime-trigger.is-empty .datetime-value { color: #71797d; }
+.datetime-trigger:focus-visible, .datetime-trigger[aria-expanded='true'] { outline: none; border-color: #2d81ff; box-shadow: 0 0 0 3px #2d81ff24; }
+.datetime-chevron { flex: none; color: #8d969b; transition: transform .2s ease; }
+.datetime-trigger[aria-expanded='true'] .datetime-chevron { transform: rotate(180deg); }
+
+.datetime-panel { margin-top: .5rem; padding: 1rem; background: #101213; border: 1px solid #2f3437; animation: control-in .16s ease-out; }
+.calendar-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: .75rem; }
+.calendar-head strong { color: #f3f5f5; font-family: 'Outfit', sans-serif; font-size: 1.05rem; font-weight: 500; letter-spacing: -.02em; }
+.calendar-nav { display: grid; place-items: center; width: 36px; height: 36px; color: #c3cacc; border: 1px solid #33383b; transition: border-color .2s, color .2s; }
+.calendar-nav:hover:not(:disabled) { color: #fff; border-color: #2d81ff; }
+.calendar-nav:disabled { opacity: .3; cursor: not-allowed; }
+.calendar-weekdays, .calendar-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
+.calendar-weekdays span { padding: .3rem 0; text-align: center; color: #6f7a80; font-family: 'Outfit', sans-serif; font-size: .64rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
+.calendar-day { position: relative; height: 38px; color: #dfe4e6; font-family: 'Outfit', sans-serif; font-size: .88rem; transition: background .15s, color .15s; }
+.calendar-day:hover:not(:disabled):not(.selected) { background: #1d2731; color: #fff; }
+.calendar-day.outside { color: #5d676c; }
+.calendar-day:disabled { color: #3a4246; cursor: not-allowed; }
+.calendar-day.today { color: #69aaff; font-weight: 600; }
+.calendar-day.today::after { content: ''; position: absolute; left: 50%; bottom: 5px; width: 4px; height: 4px; border-radius: 50%; background: currentColor; transform: translateX(-50%); }
+.calendar-day.selected { color: #fff; background: #2d81ff; font-weight: 600; }
+.calendar-day:focus-visible { outline: 2px solid #69aaff; outline-offset: -2px; }
+
+.time-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .8rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #262b2e; }
+.time-controls { display: flex; align-items: center; gap: .4rem; }
+.time-select { height: 44px; min-width: 76px; padding: 0 .7rem; color: #f3f5f5; background: #151819; border: 1px solid #414547; font-family: 'Outfit', sans-serif; font-size: .95rem; transition: border-color .2s, box-shadow .2s; }
+.time-select:focus-visible, .time-select[aria-expanded='true'] { border-color: #2d81ff; box-shadow: 0 0 0 3px #2d81ff24; }
+.time-colon { color: #6f7a80; font-family: 'Outfit', sans-serif; font-size: 1.1rem; }
+.period-toggle { display: flex; margin-left: .4rem; border: 1px solid #414547; }
+.period-toggle button { height: 42px; padding: 0 .75rem; color: #9aa4a7; font-family: 'Outfit', sans-serif; font-size: .8rem; font-weight: 600; letter-spacing: .06em; transition: background .2s, color .2s; }
+.period-toggle button:not(.active):hover { color: #fff; }
+.period-toggle button.active { color: #fff; background: #2d81ff; }
+.period-toggle button:focus-visible { outline-offset: -2px; }
+
+.datetime-foot { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 1rem; }
+.datetime-note { margin: 0; color: #8f9a9f; font-size: .74rem; line-height: 1.35; }
+.datetime-note.warn { color: #f19d94; }
+.datetime-done { flex: none; padding: .6rem 1.1rem; color: #fff; background: #2d81ff; font-family: 'Outfit', sans-serif; font-size: .82rem; font-weight: 600; transition: background .2s; }
+.datetime-done:hover { background: #1f6fe6; }
+
+@keyframes control-in { from { opacity: 0; transform: translateY(-4px); } }
+@keyframes control-in-up { from { opacity: 0; transform: translateY(4px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .select-menu, .datetime-panel { animation: none; }
+  .select-chevron, .datetime-chevron, .datetime-trigger, .calendar-day, .time-select { transition: none; }
+}

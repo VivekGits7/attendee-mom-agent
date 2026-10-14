@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from typing import List, Optional
 
 from app.attendee import AttendeeUtterance
@@ -13,8 +14,8 @@ from app.database import (
 from app.meeting.enums import (
     EmailStatus,
     MeetingPlatform,
-    MeetingStatus,
     MeetingSortBy,
+    MeetingStatus,
     UtteranceSource,
 )
 
@@ -46,13 +47,17 @@ _SORT_COLUMNS = {
 
 
 def _meeting_filters(
-    search: Optional[str], status: Optional[MeetingStatus], platform: Optional[MeetingPlatform]
+    search: Optional[str],
+    status: Optional[MeetingStatus],
+    platform: Optional[MeetingPlatform],
 ) -> tuple[str, list]:
     conditions: list[str] = []
     args: list = []
     if search:
         args.append(f"%{search.strip()}%")
-        conditions.append(f"(title ILIKE ${len(args)} OR recipient_email ILIKE ${len(args)})")
+        conditions.append(
+            f"(title ILIKE ${len(args)} OR recipient_email ILIKE ${len(args)})"
+        )
     if status:
         args.append(status.value)
         conditions.append(f"status = ${len(args)}")
@@ -87,6 +92,7 @@ class Meeting:
         self.platform = kwargs.get("platform")
         self.bot_id = kwargs.get("bot_id")
         self.bot_state = kwargs.get("bot_state")
+        self.bot_state_changed_at = kwargs.get("bot_state_changed_at")
         self.status = kwargs.get("status")
         self.recipient_email = kwargs.get("recipient_email")
         self.join_at = kwargs.get("join_at")
@@ -189,32 +195,53 @@ class Meeting:
         return row is not None
 
     async def set_bot(self, bot_id: str, bot_state: Optional[str]) -> None:
-        await execute_command(
-            "UPDATE meetings SET bot_id = $2, bot_state = $3, updated_at = NOW() WHERE meeting_id = $1",
+        # The first webhook can land before this write, so keep any state it already stored.
+        row = await execute_command_with_return(
+            # SQL
+            """
+            UPDATE meetings
+            SET bot_id = $2,
+                bot_state = CASE WHEN bot_state_changed_at IS NULL THEN $3 ELSE bot_state END,
+                updated_at = NOW()
+            WHERE meeting_id = $1
+            RETURNING bot_state
+            """,
             self.meeting_id,
             bot_id,
             bot_state,
         )
-        self.bot_id, self.bot_state = bot_id, bot_state
+        self.bot_id = bot_id
+        self.bot_state = row["bot_state"] if row else bot_state
 
     async def update_progress(
-        self, bot_state: str, status: Optional[MeetingStatus]
-    ) -> None:
-        await execute_command(
+        self,
+        bot_state: str,
+        status: Optional[MeetingStatus],
+        changed_at: Optional[datetime] = None,
+    ) -> bool:
+        # Webhooks can arrive out of order, so a change older than the stored one is skipped.
+        row = await execute_command_with_return(
             # SQL
             """
             UPDATE meetings
             SET bot_state = $2,
+                bot_state_changed_at = COALESCE($7::timestamptz, bot_state_changed_at),
                 status = CASE WHEN $3::text IS NOT NULL AND status NOT IN ($4, $5, $6) THEN $3::text ELSE status END,
                 updated_at = NOW()
             WHERE meeting_id = $1
+              AND ($7::timestamptz IS NULL OR bot_state_changed_at IS NULL OR bot_state_changed_at <= $7::timestamptz)
+            RETURNING meeting_id
             """,
             self.meeting_id,
             bot_state,
             status.value if status else None,
             *FINISHED_STATUSES,
+            changed_at,
         )
+        if row is None:
+            return False
         self.bot_state = bot_state
+        return True
 
     async def mark_status(
         self, status: MeetingStatus, error_message: Optional[str] = None

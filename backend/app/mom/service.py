@@ -55,21 +55,18 @@ async def _execute_with_retry(func, *args, operation_name: str, **kwargs) -> Any
     raise last_error
 
 
-async def generate_minutes(title: str, transcript_text: str) -> MeetingMinutes:
-    user_message = get_system_prompt("mom", "user_template").format(
-        title=title, transcript=transcript_text
-    )
+async def generate_minutes(transcript_text: str) -> MeetingMinutes:
     try:
         response = await _execute_with_retry(
             get_openai_client().responses.parse,
             operation_name="MOM generation",
             model=settings.OPENAI_MOM_MODEL,
             instructions=get_system_prompt("mom"),
-            input=[{"role": "user", "content": user_message}],
+            input=transcript_text,
             text_format=MeetingMinutes,
             reasoning={"effort": settings.OPENAI_MOM_REASONING_EFFORT},
             max_output_tokens=settings.OPENAI_MOM_MAX_OUTPUT_TOKENS,
-            prompt_cache_key="mom-v1",
+            prompt_cache_key="mom-v2",
         )
     except Exception as e:
         logger.error(f"MOM generation failed: {type(e).__name__}: {e}")
