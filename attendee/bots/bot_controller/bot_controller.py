@@ -898,7 +898,7 @@ class BotController:
         if self.get_recording_transcription_provider() == TranscriptionProviders.SARVAM:
             return 1  # seconds
         else:
-            return 3  # seconds
+            return float(os.getenv("UTTERANCE_SILENCE_SECONDS", "2"))
 
     def run(self):
         if self.run_called:

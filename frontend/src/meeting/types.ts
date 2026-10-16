@@ -27,6 +27,7 @@ export interface Meeting {
 }
 
 export interface Utterance {
+  utterance_id: string;
   speaker_name: string;
   speaker_is_host: boolean;
   timestamp_ms: number;
@@ -44,6 +45,13 @@ export interface MeetingDetail extends Meeting {
   utterances: Utterance[];
   minutes: Minutes | null;
 }
+
+export type LiveMessage =
+  | { type: 'snapshot'; data: { meeting: Meeting; utterances: Utterance[] } }
+  | { type: 'utterance'; data: Utterance }
+  | { type: 'status'; data: Meeting }
+  | { type: 'ping' }
+  | { type: 'failed'; message: string };
 
 export interface ApiResponse<T> {
   success: boolean;

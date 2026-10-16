@@ -1,4 +1,5 @@
 import asyncio
+import uuid
 from datetime import datetime
 from typing import List, Optional
 
@@ -39,14 +40,18 @@ from app.meeting.enums import (
 from app.meeting.model import AttendeeWebhookEvent, Meeting, MeetingUtterance
 from app.meeting.schemas import (
     CreateMeetingRequest,
+    LiveTranscriptData,
     MeetingData,
     MeetingDetailData,
     UtteranceData,
+    WSStatusMessage,
+    WSUtteranceMessage,
 )
 from app.meeting.utils import (
     build_transcript_text,
     detect_platform,
     is_valid_uuid,
+    live_transcript_hub,
     render_minutes_email,
 )
 from app.mom import MeetingMinutes, generate_minutes
@@ -123,12 +128,22 @@ async def get_meeting_detail(meeting_id: str) -> MeetingDetailData:
     )
 
 
+async def get_live_snapshot(meeting_id: str) -> LiveTranscriptData:
+    meeting = await _get_meeting_or_404(meeting_id)
+    utterances = await MeetingUtterance.list_by_meeting(meeting.meeting_id)
+    return LiveTranscriptData(
+        meeting=MeetingData(**meeting.to_public_dict()),
+        utterances=[UtteranceData(**u.to_public_dict()) for u in utterances],
+    )
+
+
 async def request_bot_leave(meeting_id: str) -> MeetingData:
     meeting = await _get_meeting_or_404(meeting_id)
     if not meeting.bot_id or meeting.bot_state in LEFT_BOT_STATES:
         raise ConflictException("The bot is not in this meeting anymore")
     await leave_bot(meeting.bot_id)
     await meeting.update_progress(AttendeeBotState.LEAVING.value, None)
+    await _publish_status(meeting.meeting_id)
     return MeetingData(**meeting.to_public_dict())
 
 
@@ -139,6 +154,7 @@ async def regenerate_minutes(
     if meeting.bot_state not in FINAL_BOT_STATES:
         raise ConflictException("Minutes can be generated only after the meeting ends")
     await meeting.mark_status(MeetingStatus.PROCESSING)
+    await _publish_status(meeting.meeting_id)
     background_tasks.add_task(finalize_meeting, str(meeting.meeting_id))
     return MeetingData(**meeting.to_public_dict())
 
@@ -180,11 +196,13 @@ async def finalize_meeting(meeting_id: str) -> None:
             reason = await _no_transcript_reason(meeting)
             logger.warning(f"No transcript for meeting {meeting_id}: {reason.name}")
             await meeting.mark_status(MeetingStatus.FAILED, reason.value)
+            await _publish_status(meeting.meeting_id)
             return
 
         minutes = await generate_minutes(build_transcript_text(utterances))
         await meeting.save_minutes(minutes.model_dump(mode="json"))
         await meeting.mark_status(MeetingStatus.COMPLETED)
+        await _publish_status(meeting.meeting_id)
         logger.info(f"Minutes ready for meeting {meeting_id}")
 
         try:
@@ -192,6 +210,7 @@ async def finalize_meeting(meeting_id: str) -> None:
         except Exception as email_error:
             logger.error(f"Minutes email step failed for {meeting_id}: {email_error}")
             await meeting.set_email_result(EmailStatus.FAILED, None)
+        await _publish_status(meeting.meeting_id)
 
     except Exception as e:
         logger.error(f"Finalize failed for meeting {meeting_id}: {e}", exc_info=True)
@@ -200,6 +219,7 @@ async def finalize_meeting(meeting_id: str) -> None:
                 await meeting.mark_status(
                     MeetingStatus.FAILED, get_user_friendly_message(e)
                 )
+                await _publish_status(meeting.meeting_id)
             except Exception as db_error:
                 logger.error(
                     f"Could not mark meeting {meeting_id} as failed: {db_error}"
@@ -237,10 +257,14 @@ async def _store_live_utterance(meeting: Meeting, data: dict) -> None:
     if meeting.status in CLOSED_MEETING_STATUSES:
         return
     utterance = AttendeeUtterance.model_validate(data)
-    if utterance.text:
-        await MeetingUtterance.upsert(
-            meeting.meeting_id, utterance, UtteranceSource.REALTIME
-        )
+    if not utterance.text:
+        return
+    line = await MeetingUtterance.upsert(
+        meeting.meeting_id, utterance, UtteranceSource.REALTIME
+    )
+    if line is not None:
+        message = WSUtteranceMessage(data=UtteranceData(**line.to_public_dict()))
+        live_transcript_hub.publish(meeting.meeting_id, message.model_dump(mode="json"))
 
 
 async def _apply_state_change(
@@ -260,6 +284,7 @@ async def _apply_state_change(
             f"Skipped stale bot state {change.new_state} for meeting {meeting.meeting_id}"
         )
         return
+    await _publish_status(meeting.meeting_id)
 
     if change.new_state in FINAL_BOT_STATES and await Meeting.claim_for_processing(
         meeting.meeting_id
@@ -310,6 +335,20 @@ async def _sync_final_transcript(meeting: Meeting) -> None:
         return
     if final_utterances:
         await MeetingUtterance.replace_all(meeting.meeting_id, final_utterances)
+        live_transcript_hub.resync(meeting.meeting_id)
+
+
+# Live updates are best effort, a failure here must never undo the change that triggered it.
+async def _publish_status(meeting_id: uuid.UUID) -> None:
+    if not live_transcript_hub.has_subscribers(meeting_id):
+        return
+    try:
+        meeting = await Meeting.find_by_id(str(meeting_id))
+        if meeting is not None:
+            message = WSStatusMessage(data=MeetingData(**meeting.to_public_dict()))
+            live_transcript_hub.publish(meeting_id, message.model_dump(mode="json"))
+    except Exception as e:
+        logger.warning(f"Live status update failed for meeting {meeting_id}: {type(e).__name__}")
 
 
 async def _deliver_minutes(meeting: Meeting, minutes: MeetingMinutes) -> None:

@@ -1,6 +1,25 @@
 from urllib.parse import unquote, urlsplit
 
+import pytest
+from pydantic import ValidationError
+
 from app.config import Settings
+
+
+@pytest.mark.parametrize("secret", ["change-me", "too-short"])
+def test_production_rejects_weak_jwt_secret(secret):
+    with pytest.raises(ValidationError):
+        Settings(ENVIRONMENT="production", JWT_SECRET_KEY=secret)
+
+
+def test_production_accepts_long_jwt_secret():
+    config = Settings(ENVIRONMENT="production", JWT_SECRET_KEY="x" * 48)
+    assert config.is_production
+
+
+def test_signup_domains_are_normalized():
+    config = Settings(SIGNUP_EMAIL_DOMAINS=["@TCGDigital.com"])
+    assert config.SIGNUP_EMAIL_DOMAINS == ["tcgdigital.com"]
 
 
 def test_database_url_encodes_credentials_and_database_name():

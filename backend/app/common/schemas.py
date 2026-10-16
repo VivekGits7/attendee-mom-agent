@@ -180,7 +180,7 @@ class HealthCheckResponse(BaseResponse):
 COMMON_ERROR_RESPONSES = {
     401: {
         "model": UnauthorizedResponse,
-        "description": "API key or webhook signature missing or invalid",
+        "description": "API key, bearer token, or webhook signature missing or invalid",
     },
     422: {
         "model": ValidationErrorResponse,

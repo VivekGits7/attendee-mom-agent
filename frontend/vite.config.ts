@@ -4,13 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), ['BACKEND_', 'API_']);
-  if (mode === 'development') {
-    const missing = ['BACKEND_PROXY_TARGET', 'BACKEND_API_KEY'].filter((name) => !env[name]);
-    if (missing.length) throw new Error(`Set ${missing.join(' and ')} in frontend/.env`);
-  }
-
-  // The proxy adds the API key server side so it never ships in the browser bundle.
-  const apiHeaders = env.BACKEND_API_KEY ? { 'X-API-Key': env.BACKEND_API_KEY } : undefined;
+  if (mode === 'development' && !env.BACKEND_PROXY_TARGET) throw new Error('Set BACKEND_PROXY_TARGET in frontend/.env');
 
   return {
     plugins: [react(), tailwindcss()],
@@ -19,7 +13,7 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: env.BACKEND_PROXY_TARGET
         ? {
-            '/api': { target: env.BACKEND_PROXY_TARGET, changeOrigin: true, headers: apiHeaders },
+            '/api': { target: env.BACKEND_PROXY_TARGET, changeOrigin: true, ws: true },
             '/health': { target: env.BACKEND_PROXY_TARGET, changeOrigin: true },
           }
         : undefined,

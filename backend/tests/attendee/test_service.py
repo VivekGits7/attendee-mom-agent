@@ -64,14 +64,14 @@ def test_payload_includes_join_at_and_deepgram(monkeypatch):
 
 def test_payload_requests_openai_transcription(monkeypatch):
     monkeypatch.setattr(settings, "TRANSCRIPTION_PROVIDER", "openai")
-    monkeypatch.setattr(settings, "OPENAI_TRANSCRIPTION_MODEL", "gpt-4o-transcribe")
+    monkeypatch.setattr(settings, "OPENAI_TRANSCRIPTION_MODEL", "gpt-transcribe")
 
     payload = build_bot_payload(
         "meeting-1", "https://meet.google.com/abc-defg-hij", None
     )
 
     assert payload["transcription_settings"] == {
-        "openai": {"model": "gpt-4o-transcribe"}
+        "openai": {"model": "gpt-transcribe"}
     }
 
 

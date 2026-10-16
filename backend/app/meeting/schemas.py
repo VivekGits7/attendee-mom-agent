@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -16,7 +16,7 @@ MEETING_EXAMPLE = {
     "bot_id": "bot_3hfP0PXEsNinIZmh",
     "bot_state": "joining",
     "status": "joining",
-    "recipient_email": "vivek@tcg.com",
+    "recipient_email": "tcg@tcgdigital.com",
     "join_at": None,
     "ends_at": None,
     "calendar_synced": False,
@@ -31,7 +31,7 @@ MINUTES_EXAMPLE = {
     "outcomes": [
         {
             "item": "Share the API contract with the frontend team",
-            "owner": "Vivek Vishwakarma",
+            "owner": "TCG User",
             "due_date": "Friday",
         },
         {"item": "Move the release by one week", "owner": None, "due_date": None},
@@ -58,7 +58,7 @@ class CreateMeetingRequest(BaseModel):
     recipient_email: Optional[EmailStr] = Field(
         default=None,
         description="Who gets the minutes, must be on an allowed domain",
-        examples=["vivek@tcg.com"],
+        examples=["tcg@tcgdigital.com"],
     )
     join_at: Optional[datetime] = Field(
         default=None,
@@ -100,7 +100,7 @@ class CreateMeetingRequest(BaseModel):
             "example": {
                 "meeting_url": "https://meet.google.com/abc-defg-hij",
                 "title": "Sprint planning",
-                "recipient_email": "vivek@tcg.com",
+                "recipient_email": "tcg@tcgdigital.com",
                 "join_at": "2026-10-12T10:00:00Z",
             }
         }
@@ -134,7 +134,7 @@ class MeetingData(BaseModel):
         ..., description="Pipeline status", examples=["joining"]
     )
     recipient_email: Optional[str] = Field(
-        None, description="Requested recipient", examples=["vivek@tcg.com"]
+        None, description="Requested recipient", examples=["tcg@tcgdigital.com"]
     )
     join_at: Optional[str] = Field(
         None, description="Scheduled join time", examples=["2026-10-12T10:00:00+00:00"]
@@ -153,7 +153,7 @@ class MeetingData(BaseModel):
         ..., description="Minutes email status", examples=["pending"]
     )
     email_sent_to: Optional[str] = Field(
-        None, description="Address the minutes went to", examples=["vivek@tcg.com"]
+        None, description="Address the minutes went to", examples=["tcg@tcgdigital.com"]
     )
     error_message: Optional[str] = Field(
         None,
@@ -166,8 +166,13 @@ class MeetingData(BaseModel):
 
 
 class UtteranceData(BaseModel):
+    utterance_id: str = Field(
+        ...,
+        description="Line UUID, stays the same when a live line is updated",
+        examples=["9b2e4c1a-6f0d-4a8e-b6f1-2d7c5e8a9f30"],
+    )
     speaker_name: str = Field(
-        ..., description="Speaker name", examples=["Vivek Vishwakarma"]
+        ..., description="Speaker name", examples=["TCG User"]
     )
     speaker_is_host: bool = Field(
         ..., description="Whether the speaker is the host", examples=[True]
@@ -223,10 +228,11 @@ class MeetingDetailResponse(BaseResponse):
                     "bot_state": "ended",
                     "status": "completed",
                     "email_status": "sent",
-                    "email_sent_to": "vivek@tcg.com",
+                    "email_sent_to": "tcg@tcgdigital.com",
                     "utterances": [
                         {
-                            "speaker_name": "Vivek Vishwakarma",
+                            "utterance_id": "9b2e4c1a-6f0d-4a8e-b6f1-2d7c5e8a9f30",
+                            "speaker_name": "TCG User",
                             "speaker_is_host": True,
                             "timestamp_ms": 1791887310881,
                             "duration_ms": 7710,
@@ -275,4 +281,71 @@ class MeetingActionResponse(BaseResponse):
                 "data": {**MEETING_EXAMPLE, "bot_state": "leaving"},
             }
         }
+    )
+
+
+LIVE_UTTERANCE_EXAMPLE = {
+    "utterance_id": "9b2e4c1a-6f0d-4a8e-b6f1-2d7c5e8a9f30",
+    "speaker_name": "TCG User",
+    "speaker_is_host": True,
+    "timestamp_ms": 1791887310881,
+    "duration_ms": 7710,
+    "text": "Let's lock the sprint scope today.",
+}
+
+
+class LiveTranscriptData(BaseModel):
+    meeting: MeetingData = Field(..., description="Meeting details at the time of the snapshot")
+    utterances: List[UtteranceData] = Field(..., description="Every transcript line so far, in order")
+
+
+class WSSnapshotMessage(BaseModel):
+    type: Literal["snapshot"] = Field("snapshot", description="Full transcript, replace what the client shows")
+    data: LiveTranscriptData = Field(..., description="Meeting and transcript")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "type": "snapshot",
+                "data": {
+                    "meeting": {**MEETING_EXAMPLE, "status": "in_progress", "bot_state": "joined_recording"},
+                    "utterances": [LIVE_UTTERANCE_EXAMPLE],
+                },
+            }
+        }
+    )
+
+
+class WSUtteranceMessage(BaseModel):
+    type: Literal["utterance"] = Field("utterance", description="A new line, or an update to a line with the same utterance_id")
+    data: UtteranceData = Field(..., description="Transcript line")
+
+    model_config = ConfigDict(
+        json_schema_extra={"example": {"type": "utterance", "data": LIVE_UTTERANCE_EXAMPLE}}
+    )
+
+
+class WSStatusMessage(BaseModel):
+    type: Literal["status"] = Field("status", description="Meeting status, bot state or email status changed")
+    data: MeetingData = Field(..., description="Meeting details after the change")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {"type": "status", "data": {**MEETING_EXAMPLE, "status": "completed", "bot_state": "ended"}}
+        }
+    )
+
+
+class WSPingMessage(BaseModel):
+    type: Literal["ping"] = Field("ping", description="Keep alive, nothing to do")
+
+    model_config = ConfigDict(json_schema_extra={"example": {"type": "ping"}})
+
+
+class WSFailedMessage(BaseModel):
+    type: Literal["failed"] = Field("failed", description="The socket is about to close")
+    message: str = Field(..., description="Why the socket is closing", examples=["Please log in to continue"])
+
+    model_config = ConfigDict(
+        json_schema_extra={"example": {"type": "failed", "message": "Please log in to continue"}}
     )

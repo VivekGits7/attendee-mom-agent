@@ -19,6 +19,14 @@ class Settings(BaseSettings):
         default=["http://localhost:3000"], description="Allowed origins in production"
     )
 
+    # AUTH
+    JWT_SECRET_KEY: str = Field(default="change-me", description="Secret used to sign access tokens")
+    JWT_ALGORITHM: str = Field(default="HS256", description="Access token signing algorithm")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=1440, ge=1, description="Access token lifetime in minutes")
+    SIGNUP_EMAIL_DOMAINS: List[str] = Field(
+        default=["tcgdigital.com"], description="Email domains allowed to sign up"
+    )
+
     # DATABASE
     POSTGRES_DB_HOST: str = Field(default="localhost", description="DB host")
     POSTGRES_DB_PORT: int = Field(default=5432, description="DB port")
@@ -47,8 +55,8 @@ class Settings(BaseSettings):
         default="closed_captions", description="Transcript source"
     )
     OPENAI_TRANSCRIPTION_MODEL: Literal[
-        "gpt-4o-transcribe", "gpt-4o-mini-transcribe", "gpt-4o-transcribe-diarize"
-    ] = Field(default="gpt-4o-transcribe", description="OpenAI speech-to-text model")
+        "gpt-transcribe", "gpt-4o-transcribe", "gpt-4o-mini-transcribe", "gpt-4o-transcribe-diarize"
+    ] = Field(default="gpt-transcribe", description="OpenAI speech-to-text model")
     DEEPGRAM_MODEL: str = Field(
         default="nova-3", description="Deepgram model when provider is deepgram"
     )
@@ -87,6 +95,17 @@ class Settings(BaseSettings):
     )
     TRANSCRIPT_READY_POLL_SECONDS: int = Field(
         default=10, description="Poll interval for the final transcript"
+    )
+
+    # LIVE TRANSCRIPT WEBSOCKET
+    LIVE_TRANSCRIPT_AUTH_TIMEOUT_SECONDS: float = Field(
+        default=10, gt=0, description="Seconds a socket gets to send its login token"
+    )
+    LIVE_TRANSCRIPT_PING_SECONDS: float = Field(
+        default=25, gt=0, description="Keep alive interval, the login is checked again on each one"
+    )
+    LIVE_TRANSCRIPT_QUEUE_SIZE: int = Field(
+        default=500, ge=10, description="Events buffered per socket before it gets a fresh snapshot"
     )
 
     # MICROSOFT TEAMS CALENDAR
@@ -143,6 +162,13 @@ class Settings(BaseSettings):
         if sender_domain not in allowed:
             raise ValueError(f"SMTP_FROM_EMAIL must be on one of {sorted(allowed)}")
         self.ALLOWED_EMAIL_DOMAINS = sorted(allowed)
+        self.SIGNUP_EMAIL_DOMAINS = sorted({d.lower().lstrip("@") for d in self.SIGNUP_EMAIL_DOMAINS})
+        return self
+
+    @model_validator(mode="after")
+    def validate_jwt_secret(self) -> "Settings":
+        if self.is_production and (self.JWT_SECRET_KEY == "change-me" or len(self.JWT_SECRET_KEY) < 32):
+            raise ValueError("JWT_SECRET_KEY must be a random string of at least 32 characters in production")
         return self
 
     @property

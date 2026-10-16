@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import BackgroundTasks
@@ -10,7 +10,7 @@ from app.attendee import AttendeeBot, AttendeeTrigger, AttendeeUtterance, Attend
 from app.error import ConflictException, ExternalServiceException
 from app.meeting import service as meeting_service
 from app.meeting.enums import EmailStatus, MeetingStatus, NoTranscriptReason
-from app.meeting.model import Meeting
+from app.meeting.model import Meeting, MeetingUtterance
 from app.mom import MeetingMinutes, Outcome
 
 MINUTES = MeetingMinutes(
@@ -252,8 +252,20 @@ class TestWebhookHandler:
         monkeypatch.setattr(
             meeting_service.Meeting, "find_by_id", AsyncMock(return_value=meeting)
         )
-        upsert = AsyncMock()
+        line_id = uuid.uuid4()
+        upsert = AsyncMock(
+            return_value=MeetingUtterance(
+                meeting_utterance_id=line_id,
+                speaker_name="Vivek",
+                speaker_is_host=True,
+                timestamp_ms=1000,
+                duration_ms=2000,
+                text="Let's cook.",
+            )
+        )
         monkeypatch.setattr(meeting_service.MeetingUtterance, "upsert", upsert)
+        publish = MagicMock()
+        monkeypatch.setattr(meeting_service.live_transcript_hub, "publish", publish)
 
         await meeting_service.handle_attendee_webhook(
             envelope("transcript.update", UTTERANCE_DATA, meeting), BackgroundTasks()
@@ -262,6 +274,11 @@ class TestWebhookHandler:
         stored: AttendeeUtterance = upsert.await_args.args[1]
         assert stored.speaker_name == "Vivek"
         assert stored.text == "Let's cook."
+        published_to, message = publish.call_args.args
+        assert published_to == meeting.meeting_id
+        assert message["type"] == "utterance"
+        assert message["data"]["utterance_id"] == str(line_id)
+        assert message["data"]["text"] == "Let's cook."
 
     async def test_live_lines_after_meeting_closed_are_skipped(self, monkeypatch):
         meeting = make_meeting(status=MeetingStatus.PROCESSING.value)
@@ -446,3 +463,50 @@ class TestFinalize:
         await meeting_service._sync_final_transcript(make_meeting())
 
         replace.assert_not_awaited()
+
+
+class TestLiveEvents:
+    async def test_state_change_publishes_status_to_watchers(self, monkeypatch):
+        meeting = make_meeting()
+        monkeypatch.setattr(meeting_service.Meeting, "find_by_id", AsyncMock(return_value=meeting))
+        monkeypatch.setattr(meeting_service.live_transcript_hub, "has_subscribers", MagicMock(return_value=True))
+        publish = MagicMock()
+        monkeypatch.setattr(meeting_service.live_transcript_hub, "publish", publish)
+
+        await meeting_service._apply_state_change(
+            meeting, {"old_state": "joining", "new_state": "joined_recording"}, BackgroundTasks()
+        )
+
+        message = publish.call_args.args[1]
+        assert message["type"] == "status"
+        assert message["data"]["meeting_id"] == str(meeting.meeting_id)
+
+    async def test_no_watchers_means_no_extra_query(self, monkeypatch):
+        find = AsyncMock()
+        monkeypatch.setattr(meeting_service.Meeting, "find_by_id", find)
+
+        await meeting_service._publish_status(uuid.uuid4())
+
+        find.assert_not_awaited()
+
+    async def test_status_publish_failure_is_swallowed(self, monkeypatch):
+        monkeypatch.setattr(meeting_service.live_transcript_hub, "has_subscribers", MagicMock(return_value=True))
+        monkeypatch.setattr(meeting_service.Meeting, "find_by_id", AsyncMock(side_effect=RuntimeError("db down")))
+
+        await meeting_service._publish_status(uuid.uuid4())
+
+    async def test_final_transcript_triggers_resync(self, monkeypatch):
+        meeting = make_meeting()
+        monkeypatch.setattr(
+            meeting_service, "get_bot", AsyncMock(return_value=AttendeeBot(id="bot_1", transcription_state="complete"))
+        )
+        monkeypatch.setattr(
+            meeting_service, "get_transcript", AsyncMock(return_value=[AttendeeUtterance(**UTTERANCE_DATA)])
+        )
+        monkeypatch.setattr(meeting_service.MeetingUtterance, "replace_all", AsyncMock())
+        resync = MagicMock()
+        monkeypatch.setattr(meeting_service.live_transcript_hub, "resync", resync)
+
+        await meeting_service._sync_final_transcript(meeting)
+
+        resync.assert_called_once_with(meeting.meeting_id)

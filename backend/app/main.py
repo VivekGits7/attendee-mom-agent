@@ -9,6 +9,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from app.attendee import close_attendee_client
+from app.auth import auth_router
 from app.common import (
     HealthCheckResponse,
     HealthData,
@@ -20,7 +21,7 @@ from app.database import close_db_pool, create_db_pool
 from app.error import setup_error_handlers
 from app.limiter import limiter
 from app.logger import get_logger, setup_logging
-from app.meeting import meeting_router, webhook_router
+from app.meeting import meeting_router, meeting_ws_router, webhook_router
 from app.meeting.calendar import run_teams_calendar_sync
 from app.middleware import RequestLoggingMiddleware, SecurityHeadersMiddleware
 
@@ -81,8 +82,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
 app.include_router(meeting_router)
 app.include_router(webhook_router)
+app.include_router(meeting_ws_router)
 
 
 @app.get(

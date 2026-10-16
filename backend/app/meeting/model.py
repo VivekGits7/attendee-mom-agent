@@ -456,17 +456,19 @@ class MeetingUtterance:
         meeting_id: uuid.UUID,
         utterance: AttendeeUtterance,
         source: UtteranceSource,
-    ) -> None:
-        await execute_command(
+    ) -> Optional["MeetingUtterance"]:
+        row = await execute_command_with_return(
             _INSERT_UTTERANCE
             # SQL
             + """
             ON CONFLICT (meeting_id, speaker_uuid, timestamp_ms)
             DO UPDATE SET text = EXCLUDED.text, duration_ms = EXCLUDED.duration_ms,
                 speaker_name = EXCLUDED.speaker_name, source = EXCLUDED.source, updated_at = NOW()
+            RETURNING *
             """,
             *_utterance_args(meeting_id, utterance, source),
         )
+        return cls(**dict(row)) if row else None
 
     @classmethod
     async def replace_all(
@@ -496,6 +498,7 @@ class MeetingUtterance:
 
     def to_dict(self) -> dict:
         return {
+            "utterance_id": str(self.meeting_utterance_id),
             "speaker_name": self.speaker_name,
             "speaker_is_host": self.speaker_is_host,
             "timestamp_ms": self.timestamp_ms,

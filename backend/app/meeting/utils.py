@@ -1,13 +1,57 @@
+import asyncio
 import html
 import uuid
+from collections import defaultdict
 from datetime import datetime, timezone
-from typing import Iterable, Optional, Tuple
+from typing import Any, Iterable, Optional, Tuple
 from urllib.parse import urlparse
 
+from app.config import settings
 from app.meeting.enums import MeetingPlatform
 from app.mom import MeetingMinutes
 
 TEAMS_HOSTS = ("teams.microsoft.com", "teams.live.com")
+
+RESYNC = object()
+
+
+class LiveTranscriptHub:
+    def __init__(self) -> None:
+        self._subscribers: dict[str, dict[asyncio.Queue, asyncio.AbstractEventLoop]] = defaultdict(dict)
+
+    def subscribe(self, meeting_id: str | uuid.UUID) -> asyncio.Queue:
+        queue: asyncio.Queue = asyncio.Queue(maxsize=settings.LIVE_TRANSCRIPT_QUEUE_SIZE)
+        self._subscribers[str(meeting_id)][queue] = asyncio.get_running_loop()
+        return queue
+
+    def unsubscribe(self, meeting_id: str | uuid.UUID, queue: asyncio.Queue) -> None:
+        key = str(meeting_id)
+        self._subscribers.get(key, {}).pop(queue, None)
+        if not self._subscribers.get(key):
+            self._subscribers.pop(key, None)
+
+    def has_subscribers(self, meeting_id: str | uuid.UUID) -> bool:
+        return bool(self._subscribers.get(str(meeting_id)))
+
+    def publish(self, meeting_id: str | uuid.UUID, message: Any) -> None:
+        for queue, loop in list(self._subscribers.get(str(meeting_id), {}).items()):
+            loop.call_soon_threadsafe(_offer, queue, message)
+
+    def resync(self, meeting_id: str | uuid.UUID) -> None:
+        self.publish(meeting_id, RESYNC)
+
+
+# A socket that falls this far behind drops its backlog and reloads the whole transcript instead.
+def _offer(queue: asyncio.Queue, message: Any) -> None:
+    try:
+        queue.put_nowait(message)
+    except asyncio.QueueFull:
+        while not queue.empty():
+            queue.get_nowait()
+        queue.put_nowait(RESYNC)
+
+
+live_transcript_hub = LiveTranscriptHub()
 
 
 def detect_platform(meeting_url: str) -> Optional[MeetingPlatform]:

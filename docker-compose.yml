@@ -126,7 +126,6 @@ services:
     container_name: mom-frontend
     environment:
       BACKEND_UPSTREAM: http://mom-backend:8010
-      BACKEND_API_KEY: ${BACKEND_API_KEY:?Set BACKEND_API_KEY in .env}
     ports:
       - "${FRONTEND_PORT:-9901}:80"
     depends_on:

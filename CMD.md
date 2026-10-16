@@ -64,7 +64,7 @@ bun install
 bun run dev
 ```
 
-Open http://127.0.0.1:3000. The backend URL and API key come from `frontend/.env`. Stop the frontend with `Ctrl+C`. For a production bundle, run `bun run build`.
+Open http://127.0.0.1:3000 and sign in, see [Create a login](#create-a-login). The backend URL comes from `frontend/.env`. Stop the frontend with `Ctrl+C`. For a production bundle, run `bun run build`.
 
 Use `/calendar` to see upcoming bot joins, `/meetings` for the searchable list, and `/meetings/<meeting-id>` for the live transcript and completed MOM. The calendar refreshes every 30 seconds while open. MOM emails use the studio's visual theme.
 
@@ -72,13 +72,32 @@ Use `/calendar` to see upcoming bot joins, `/meetings` for the searchable list, 
 
 See [backend/TEAMS_CALENDAR.md](backend/TEAMS_CALENDAR.md) to register the Microsoft Entra app, grant calendar permission, and set `backend/.env`. Once the migration is approved and applied, start the backend normally. Invite `MOM@tcgdigital.com` to a scheduled Teams meeting; the bot will be scheduled from its calendar event. For an unscheduled live call, copy the Teams meeting link into the Meeting Console.
 
+## Create a login
+
+The Meeting Console has no sign up page. `backend/scripts/set_user.py` creates a login, or resets the password when the email already exists, which also logs that user out everywhere. Only `tcgdigital.com` emails are accepted, and it asks for the password twice so it stays out of the shell history.
+
+Locally, against the database in `backend/.env`:
+
+```zsh
+cd /Users/vivek/Documents/Codehub/POC/attendee/backend
+guvrun -m scripts.set_user tcg@tcgdigital.com --name "TCG User"
+```
+
+On the VM, once `mom-backend` is running:
+
+```bash
+docker exec -it mom-backend /app/.venv/bin/python -m scripts.set_user tcg@tcgdigital.com --name "TCG User"
+```
+
+`POST /api/auth/signup` still works for scripts, on 8010 locally or 9902 on the VM. After signing in, users change their own password on `/account`.
+
 ## Deploy on the VM
 
 `docker-compose.yml` at the repo root runs Attendee, the backend and the frontend together.
 
 | Port | Service |
 | --- | --- |
-| 9901 | Meeting Console frontend, nginx adds the backend API key |
+| 9901 | Meeting Console frontend, users sign in here |
 | 9902 | FastAPI backend |
 | 9903 | Attendee dashboard and API |
 
@@ -104,6 +123,10 @@ docker compose up -d --force-recreate mom-backend
 ```
 
 For a full check of every service, see [HEALTHCHECK.md](HEALTHCHECK.md).
+
+The meeting page streams the transcript over a WebSocket on `/api/ws/`. The `mom-frontend` nginx already passes the upgrade through. If openresty or another proxy sits in front of port 9901, give `/api/ws/` the `Upgrade` and `Connection` headers and a read timeout of an hour, otherwise the page quietly falls back to 5 second polling.
+
+The bot sends a speaker's audio for transcription after 2 seconds of quiet. Set `UTTERANCE_SILENCE_SECONDS` in `attendee/.env` to change it, for example `1` for faster lines that split more often, then recreate `attendee-worker`. New bots pick it up, a bot already in a meeting keeps its old value.
 
 Check that the backend reaches Attendee over the internal network:
 
@@ -140,13 +163,12 @@ Create the database and its tables inside the server, then recreate the backend 
 ```bash
 docker exec doe-postgres psql -U postgres -tAc "SELECT 1 FROM pg_database WHERE datname = 'attendee-mom'" | grep -q 1 \
   || docker exec doe-postgres psql -U postgres -c 'CREATE DATABASE "attendee-mom"'
-docker exec -i doe-postgres psql -v ON_ERROR_STOP=1 -U postgres -d attendee-mom < backend/database/meeting.sql
-docker exec doe-postgres psql -U postgres -d attendee-mom -c '\dt'
+bash backend/database/run_migration.sh meeting.sql auth.sql
 docker compose up -d --force-recreate --no-deps mom-backend
 docker compose logs --tail 20 mom-backend
 ```
 
-Later schema changes run the same way, `docker exec -i doe-postgres psql -v ON_ERROR_STOP=1 -U postgres -d attendee-mom < backend/database/migrations/<file>.sql`. Migration files are not committed, so copy the file to the VM first.
+`run_migration.sh` runs each SQL file inside `doe-postgres` in one transaction, stops on the first error, and lists the tables at the end. Bare names are looked up in `backend/database/`, other paths are used as given. Later schema changes run the same way, `bash backend/database/run_migration.sh backend/database/migrations/<file>.sql`. Migration files are not committed, so copy the file to the VM first. Set `DB_CONTAINER`, `DB_NAME`, or `DB_USER` to point it somewhere else.
 
 | Task | Command |
 | --- | --- |
@@ -238,7 +260,7 @@ Run these from the repo root. Add `--no-deps` so only the named service changes,
 | After an env change | `docker compose up -d --force-recreate --no-deps mom-backend` | `docker compose up -d --force-recreate --no-deps mom-frontend` |
 | Follow logs | `docker compose logs -f mom-backend` | `docker compose logs -f mom-frontend` |
 
-The backend reads `backend/.env`. The frontend reads `BACKEND_API_KEY` from the root `.env`, and its React build lives inside the nginx image, so frontend code changes always need `--build`.
+The backend reads `backend/.env`. The frontend's React build lives inside the nginx image, so frontend code changes always need `--build`.
 
 Rebuild both at once:
 
