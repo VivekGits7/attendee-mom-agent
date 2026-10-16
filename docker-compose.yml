@@ -1,0 +1,149 @@
+x-attendee: &attendee
+  build: ./attendee
+  image: tcg-attendee:latest
+  env_file:
+    - ./attendee/.env
+  environment:
+    DJANGO_SETTINGS_MODULE: attendee.settings.production
+    POSTGRES_HOST: attendee-postgres
+    POSTGRES_DB: ${ATTENDEE_DB_NAME:-attendee}
+    POSTGRES_USER: ${ATTENDEE_DB_USER:-attendee}
+    POSTGRES_PASSWORD: ${ATTENDEE_DB_PASSWORD:?Set ATTENDEE_DB_PASSWORD in .env}
+    POSTGRES_SSL_REQUIRE: "false"
+    REDIS_URL: redis://attendee-redis:6379/5
+    DJANGO_SSL_REQUIRE: "false"
+    DISABLE_EMAIL: "true"
+    REQUIRE_HTTPS_WEBHOOKS: "false"
+    SITE_DOMAIN: ${PUBLIC_HOST:?Set PUBLIC_HOST in .env}:${ATTENDEE_PORT:-9903}
+    ALLOWED_HOSTS: ${PUBLIC_HOST},${ATTENDEE_DOMAIN:-localhost},attendee-app,localhost,127.0.0.1
+    CSRF_TRUSTED_ORIGINS: https://${ATTENDEE_DOMAIN:-localhost}
+    ENABLE_CHROME_SANDBOX: "false"
+  networks:
+    - mom-network
+  restart: unless-stopped
+
+services:
+  attendee-postgres:
+    image: postgres:15.3-alpine
+    container_name: attendee-postgres
+    environment:
+      POSTGRES_DB: ${ATTENDEE_DB_NAME:-attendee}
+      POSTGRES_USER: ${ATTENDEE_DB_USER:-attendee}
+      POSTGRES_PASSWORD: ${ATTENDEE_DB_PASSWORD:?Set ATTENDEE_DB_PASSWORD in .env}
+      PGDATA: /data/postgres
+    volumes:
+      - attendee-postgres-data:/data/postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - mom-network
+    restart: unless-stopped
+
+  attendee-redis:
+    image: redis:7-alpine
+    container_name: attendee-redis
+    volumes:
+      - attendee-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - mom-network
+    restart: unless-stopped
+
+  attendee-app:
+    <<: *attendee
+    container_name: attendee-app
+    entrypoint: []
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             gunicorn attendee.wsgi --bind 0.0.0.0:8000 --workers 3 --timeout 120 --access-logfile -"
+    ports:
+      - "${ATTENDEE_PORT:-9903}:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 180s
+    depends_on:
+      attendee-postgres:
+        condition: service_healthy
+      attendee-redis:
+        condition: service_healthy
+
+  attendee-worker:
+    <<: *attendee
+    container_name: attendee-worker
+    command: celery -A attendee worker -l INFO
+    depends_on:
+      attendee-app:
+        condition: service_healthy
+
+  attendee-scheduler:
+    <<: *attendee
+    container_name: attendee-scheduler
+    entrypoint: []
+    command: python manage.py run_scheduler
+    depends_on:
+      attendee-app:
+        condition: service_healthy
+
+  mom-backend:
+    build: ./backend
+    image: tcg-mom-backend:latest
+    container_name: mom-backend
+    env_file:
+      - ./backend/.env
+    environment:
+      ATTENDEE_BASE_URL: http://attendee-app:8000
+      ATTENDEE_WEBHOOK_URL: http://mom-backend:8010/api/webhooks/attendee
+    ports:
+      - "${BACKEND_PORT:-9902}:8010"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8010/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      attendee-app:
+        condition: service_started
+    networks:
+      - mom-network
+      - db-network
+    restart: unless-stopped
+
+  mom-frontend:
+    build: ./frontend
+    image: tcg-mom-frontend:latest
+    container_name: mom-frontend
+    environment:
+      BACKEND_UPSTREAM: http://mom-backend:8010
+      BACKEND_API_KEY: ${BACKEND_API_KEY:?Set BACKEND_API_KEY in .env}
+    ports:
+      - "${FRONTEND_PORT:-9901}:80"
+    depends_on:
+      mom-backend:
+        condition: service_started
+    networks:
+      - mom-network
+    restart: unless-stopped
+
+networks:
+  mom-network:
+    driver: bridge
+  # The network the backend's Postgres server already runs on, doe-postgres on the VM.
+  db-network:
+    name: ${DB_NETWORK:?Set DB_NETWORK in .env}
+    external: true
+
+volumes:
+  attendee-postgres-data:
+  attendee-redis-data:

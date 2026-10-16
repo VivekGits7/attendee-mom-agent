@@ -16,6 +16,8 @@ logger = get_logger(__name__)
 async def _schedule_event(event: CalendarEvent) -> None:
     if event.organizer_email and event.organizer_email.lower() == str(settings.TEAMS_CALENDAR_MAILBOX).lower():
         return
+    if settings.TEAMS_CALENDAR_SKIP_RECURRING and event.is_recurring:
+        return
     now = datetime.now(timezone.utc)
     join_at = event.start_at if event.start_at > now else None
     meeting = await Meeting.find_by_calendar_event_id(event.event_id)

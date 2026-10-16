@@ -28,6 +28,7 @@ class CalendarEvent:
     start_at: datetime
     end_at: datetime
     organizer_email: str | None
+    is_recurring: bool = False
 
 
 def _utc_date(value: dict) -> datetime:
@@ -67,6 +68,7 @@ def parse_calendar_event(event: dict) -> CalendarEvent | None:
         start_at=start_at,
         end_at=end_at,
         organizer_email=organizer.get("address"),
+        is_recurring=bool(event.get("seriesMasterId")) or event.get("type") in {"occurrence", "exception"},
     )
 
 
@@ -94,7 +96,7 @@ async def list_calendar_events() -> tuple[list[CalendarEvent], set[str], datetim
             params = {
                 "startDateTime": window_start.isoformat(),
                 "endDateTime": window_end.isoformat(),
-                "$select": "id,subject,start,end,isCancelled,isAllDay,responseStatus,organizer,onlineMeeting,body",
+                "$select": "id,subject,start,end,isCancelled,isAllDay,responseStatus,organizer,onlineMeeting,body,seriesMasterId,type",
                 "$top": "100",
             }
             headers = {

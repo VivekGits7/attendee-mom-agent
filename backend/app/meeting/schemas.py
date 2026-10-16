@@ -140,10 +140,14 @@ class MeetingData(BaseModel):
         None, description="Scheduled join time", examples=["2026-10-12T10:00:00+00:00"]
     )
     ends_at: Optional[str] = Field(
-        None, description="Calendar event end time", examples=["2026-10-12T10:30:00+00:00"]
+        None,
+        description="Calendar event end time",
+        examples=["2026-10-12T10:30:00+00:00"],
     )
     calendar_synced: bool = Field(
-        ..., description="Whether the meeting came from the Teams calendar", examples=[False]
+        ...,
+        description="Whether the meeting came from the Teams calendar",
+        examples=[False],
     )
     email_status: EmailStatus = Field(
         ..., description="Minutes email status", examples=["pending"]

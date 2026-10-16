@@ -19,10 +19,16 @@
                         </div>
                         {% if email_is_logged %}
                         <p class="mb-4">
-                            Attendee is running locally. Your verification link is in the attendee-app-local container logs.
+                            Attendee writes emails to its logs instead of sending them. Your verification link is in the app container logs.
                         </p>
                         <p class="mb-4">
-                            Run <code>docker compose -f dev.docker-compose.yaml logs attendee-app-local</code> from the attendee folder, then open the confirmation link addressed to your email.
+                            On the server, run <code>docker compose logs attendee-app | grep confirm-email</code> from the repo root.
+                        </p>
+                        <p class="mb-4">
+                            Locally, run <code>docker compose -f dev.docker-compose.yaml logs attendee-app-local</code> from the attendee folder.
+                        </p>
+                        <p class="mb-4">
+                            Then open the confirmation link addressed to your email.
                         </p>
                         {% else %}
                         <p class="mb-4">

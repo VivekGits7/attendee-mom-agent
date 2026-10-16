@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.example
+.venv
+logs
+archive
+tests
+.pytest_cache
+.coverage
+coverage.xml
+__pycache__
+*.py[cod]
+database/migrations
+.DS_Store

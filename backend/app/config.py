@@ -99,6 +99,7 @@ class Settings(BaseSettings):
     )
     TEAMS_CALENDAR_POLL_SECONDS: int = Field(default=60, ge=15, description="Calendar check interval in seconds")
     TEAMS_CALENDAR_LOOKAHEAD_DAYS: int = Field(default=28, ge=1, le=28, description="Days of future meetings to check")
+    TEAMS_CALENDAR_SKIP_RECURRING: bool = Field(default=True, description="Skip invites that belong to a recurring series")
 
     # OPENAI
     OPENAI_API_KEY: str = Field(default="", description="OpenAI API key")

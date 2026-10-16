@@ -67,29 +67,37 @@ def render_minutes_email(
         for outcome in minutes.outcomes
     ]
 
-    outcome_rows = "".join(
-        "<tr><td style='padding:15px 0;border-bottom:1px solid #e5ebea;vertical-align:top'>"
-        "<table role='presentation' cellpadding='0' cellspacing='0' width='100%'><tr>"
-        f"<td style='width:28px;color:#2d81ff;font-size:12px;font-weight:700;vertical-align:top'>{index:02d}</td>"
-        "<td style='color:#253238;font-size:15px;line-height:1.5'>"
-        f"<strong style='font-weight:600'>{_email_text(outcome.item)}</strong>"
-        + (
-            f"<div style='margin-top:5px;color:#728187;font-size:12px'>Owner: {_email_text(outcome.owner)}</div>"
-            if outcome.owner else ""
+    outcome_rows = (
+        "".join(
+            "<tr><td style='padding:15px 0;border-bottom:1px solid #e5ebea;vertical-align:top'>"
+            "<table role='presentation' cellpadding='0' cellspacing='0' width='100%'><tr>"
+            f"<td style='width:28px;color:#2d81ff;font-size:12px;font-weight:700;vertical-align:top'>{index:02d}</td>"
+            "<td style='color:#253238;font-size:15px;line-height:1.5'>"
+            f"<strong style='font-weight:600'>{_email_text(outcome.item)}</strong>"
+            + (
+                f"<div style='margin-top:5px;color:#728187;font-size:12px'>Owner: {_email_text(outcome.owner)}</div>"
+                if outcome.owner
+                else ""
+            )
+            + (
+                f"<div style='margin-top:3px;color:#728187;font-size:12px'>Due: {_email_text(outcome.due_date)}</div>"
+                if outcome.due_date
+                else ""
+            )
+            + "</td></tr></table></td></tr>"
+            for index, outcome in enumerate(minutes.outcomes, start=1)
         )
-        + (
-            f"<div style='margin-top:3px;color:#728187;font-size:12px'>Due: {_email_text(outcome.due_date)}</div>"
-            if outcome.due_date else ""
+        or "<tr><td style='padding:14px 0;color:#728187;font-size:14px'>No outcomes recorded.</td></tr>"
+    )
+    question_rows = (
+        "".join(
+            "<tr><td style='padding:11px 0;border-bottom:1px solid #e5ebea;color:#344249;font-size:14px;line-height:1.5'>"
+            f"<span style='color:#2d81ff;font-weight:700;margin-right:10px'>{index:02d}</span>{_email_text(question)}"
+            "</td></tr>"
+            for index, question in enumerate(minutes.open_questions, start=1)
         )
-        + "</td></tr></table></td></tr>"
-        for index, outcome in enumerate(minutes.outcomes, start=1)
-    ) or "<tr><td style='padding:14px 0;color:#728187;font-size:14px'>No outcomes recorded.</td></tr>"
-    question_rows = "".join(
-        "<tr><td style='padding:11px 0;border-bottom:1px solid #e5ebea;color:#344249;font-size:14px;line-height:1.5'>"
-        f"<span style='color:#2d81ff;font-weight:700;margin-right:10px'>{index:02d}</span>{_email_text(question)}"
-        "</td></tr>"
-        for index, question in enumerate(minutes.open_questions, start=1)
-    ) or "<tr><td style='padding:12px 0;color:#728187;font-size:14px'>No open questions.</td></tr>"
+        or "<tr><td style='padding:12px 0;color:#728187;font-size:14px'>No open questions.</td></tr>"
+    )
 
     html_body = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>

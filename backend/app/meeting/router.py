@@ -108,12 +108,22 @@ async def list_meetings_endpoint(
     - header **X-API-Key** is required
     """
     try:
-        if (join_from and join_from.tzinfo is None) or (join_until and join_until.tzinfo is None):
+        if (join_from and join_from.tzinfo is None) or (
+            join_until and join_until.tzinfo is None
+        ):
             raise BadRequestException("Join time filters must include a timezone")
         if join_from and join_until and join_from >= join_until:
             raise BadRequestException("join_from must be before join_until")
         meetings, total = await list_meetings(
-            search, status, platform, join_from, join_until, sort_by, sort_order, limit, offset
+            search,
+            status,
+            platform,
+            join_from,
+            join_until,
+            sort_by,
+            sort_order,
+            limit,
+            offset,
         )
         return MeetingListResponse(
             success=True,
