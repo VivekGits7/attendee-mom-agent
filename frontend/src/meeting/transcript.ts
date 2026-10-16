@@ -16,3 +16,20 @@ export function formatElapsed(timestampMs: number, startMs: number): string {
 export function formatClock(timestampMs: number): string {
   return clockFormat.format(new Date(timestampMs));
 }
+
+export interface SpeakerTurn {
+  key: string;
+  speakerName: string;
+  isHost: boolean;
+  lines: Utterance[];
+}
+
+export function groupTranscript(lines: Utterance[]): SpeakerTurn[] {
+  const turns: SpeakerTurn[] = [];
+  for (const line of lines) {
+    const turn = turns[turns.length - 1];
+    if (turn && turn.speakerName === line.speaker_name && turn.isHost === line.speaker_is_host) turn.lines.push(line);
+    else turns.push({ key: line.utterance_id, speakerName: line.speaker_name, isHost: line.speaker_is_host, lines: [line] });
+  }
+  return turns;
+}

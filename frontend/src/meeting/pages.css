@@ -81,13 +81,8 @@
 .live-panel-heading h2 { margin: .55rem 0 0; font-family: 'Outfit', sans-serif; font-size: clamp(1.6rem, 2.5vw, 2.5rem); line-height: 1.1; font-weight: 500; letter-spacing: -.055em; }
 .count-label { display: inline-flex; align-items: center; gap: .4rem; color: #76858b; font-size: .74rem; white-space: nowrap; }
 .panel-heading-icon { color: #2d81ff; }
-.live-transcript-list { list-style: none; margin: 0; padding: .1rem clamp(1.25rem, 2.5vw, 2rem); max-height: 800px; overflow-y: auto; }
-.live-transcript-list li { display: grid; grid-template-columns: minmax(64px, max-content) minmax(0, 1fr); gap: 1rem; padding: 1.05rem 0; border-bottom: 1px solid #e7eceb; }
-.live-transcript-list li:last-child { border-bottom: 0; }
-.live-transcript-list time { padding-top: .1rem; white-space: nowrap; color: #2d81ff; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .74rem; }
-.live-transcript-list strong { display: flex; align-items: center; gap: .45rem; color: #263338; font-size: .88rem; }
-.live-transcript-list strong small { color: #2d81ff; font-family: 'Outfit', sans-serif; font-size: .6rem; letter-spacing: .1em; }
-.live-transcript-list p { margin: .25rem 0 0; color: #536268; font-size: .9rem; line-height: 1.5; }
+.live-transcript-list { list-style: none; margin: 0; padding: 0 clamp(1.25rem, 2.5vw, 2rem) .1rem; max-height: 800px; overflow-y: auto; }
+.live-transcript-list .speaker-turn:first-child { padding-top: 1.05rem; }
 .panel-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 270px; padding: 2rem; text-align: center; color: #2d81ff; }
 .panel-empty h3 { margin: .8rem 0 .1rem; color: #273338; font-family: 'Outfit', sans-serif; font-size: 1.3rem; font-weight: 500; }
 .panel-empty p { max-width: 300px; color: #829095; font-size: .88rem; line-height: 1.5; }
@@ -122,6 +117,5 @@
   .pagination { align-items: stretch; flex-direction: column; }.pagination > div { justify-content: space-between; gap: .5rem; }.pagination button { font-size: .78rem; }
   .detail-toolbar { align-items: start; flex-direction: column; gap: .55rem; }.detail-toolbar > div { flex-wrap: wrap; }.last-synced { display: none; }.detail-hero h1 { font-size: clamp(2.9rem, 10vw, 5rem); }.back-link { margin-bottom: 2.2rem; }
   .detail-overview-facts { grid-template-columns: 1fr 1fr; }.detail-actions a, .detail-actions button { flex: 1 1 100%; justify-content: center; }
-  .live-transcript-list li { grid-template-columns: minmax(60px, max-content) minmax(0, 1fr); gap: .6rem; }
 }
 @media (prefers-reduced-motion: reduce) { .collection-cta, .meeting-row { transition: none; } }
