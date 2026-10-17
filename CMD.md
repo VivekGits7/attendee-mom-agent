@@ -288,8 +288,3 @@ ssh -N -L 9901:localhost:9901 -L 9902:localhost:9902 -L 9903:localhost:9903 tcg-
 ```
 
 Then open http://localhost:9901 for the console, http://localhost:9903 for Attendee, and http://localhost:9902/docs for the backend Swagger, which only shows when `ENVIRONMENT` is not `production`.
-
-
-Console   http://3.219.186.189:9901
-Backend   http://3.219.186.189:9902/docs
-Attendee  http://3.219.186.189:9903
